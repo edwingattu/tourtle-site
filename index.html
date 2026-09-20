@@ -1,117 +1,193 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#102a2a" />
-    <title>Tourtle — Explore your everyday</title>
-    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@^6.10.0/dist/maplibre-gl.css" />
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <main class="app-shell">
-      <section class="map-panel" aria-label="Tourtle exploration map">
-        <div id="liveMap" class="live-map" aria-label="Map of Hyderabad"></div>
-        <div class="map-topbar">
-          <a class="brand" href="#" aria-label="Tourtle home"><span class="brand-mark">T</span>tourtle</a>
-          <button class="icon-button" id="profileButton" aria-label="Open profile">AE</button>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tourtle Web App Prototype</title>
+  <!-- MapLibre GL CSS -->
+  <link href="https://unpkg.com@^6.10.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <link rel="stylesheet" href="sources/style.css">
+</head>
+<body>
+
+  <div class="app-shell">
+    <!-- Map Panel (Left side / Top on mobile) -->
+    <div class="map-panel">
+      <div id="liveMap" class="live-map"></div>
+      
+      <!-- Top Branding overlay -->
+      <div class="map-topbar">
+        <a href="#" class="brand">
+          <div class="brand-mark">t</div>tourtle
+        </a>
+        <button class="icon-button" id="profileButton" type="button" aria-label="View Profile">A</button>
+      </div>
+
+      <!-- Action Map Controls -->
+      <div class="map-controls">
+        <button class="map-control" id="recenterButton" type="button" aria-label="Recenter Map">🎯</button>
+        <button class="map-control" id="quickProgressButton" type="button" aria-label="Simulate Movement">+</button>
+        <button class="map-control" id="refreshButton" type="button" aria-label="Sync Map Data">🔄</button>
+      </div>
+
+      <!-- Map Overlay HUD Card Summary -->
+      <div class="map-summary">
+        <p class="eyebrow" id="trackingLabel">Fog clearing off</p>
+        <h3 class="territory-title" id="tileInfoButton" style="cursor:pointer;">Begumpet, Hyd</h3>
+        <div class="progress-row">
+          <span>Tile Progress</span>
+          <span id="remainingMinutes">6 more minutes</span>
         </div>
-
-        <div class="map-label label-one">Begumpet</div>
-        <div class="map-label label-two">Prakash Nagar</div>
-        <div class="map-label label-three">Hussain Sagar</div>
-        <div class="map-label label-four">Ameerpet</div>
-        <div id="hexMap" class="hex-map" aria-label="Exploration tiles"></div>
-        <div id="userDot" class="user-dot" aria-label="Your current position"><span></span></div>
-
-        <div class="map-controls">
-          <button class="map-control" id="recenterButton" aria-label="Recenter map">⌖</button>
-          <button class="map-control" id="refreshButton" aria-label="Refresh fog">↻</button>
+        <div class="progress-track">
+          <span id="tileProgressBar" style="width: 68%;"></span>
         </div>
+      </div>
+    </div>
 
-        <aside class="map-summary">
-          <p class="eyebrow">YOUR TERRITORY</p>
-          <p class="territory-title">Hyderabad, India</p>
-          <div class="progress-row"><span><b id="unlockedCount">14</b> tiles unlocked</span><span id="coveragePercent">18%</span></div>
-          <div class="progress-track"><span id="coverageBar"></span></div>
-        </aside>
-      </section>
+    <!-- Scrollable content and metrics panel (Right side) -->
+    <div class="content-panel">
+      <div class="content-header">
+        <h1>Your World</h1>
+        <button class="status-pill" id="trackingButton" type="button" aria-pressed="false">
+          <i></i>Live Tracking
+        </button>
+      </div>
 
-      <section class="content-panel">
-        <div class="content-header">
+      <!-- Main Dashboard Stats Matrix -->
+      <div class="stat-grid">
+        <div class="stat-card streak-card">
+          <div class="stat-icon">🔥</div>
           <div>
-            <p class="eyebrow">GOOD EVENING, AARAV</p>
-            <h1>Explore your everyday.</h1>
+            <p class="stat-value" id="streakCount">4</p>
+            <p class="stat-label">Day Streak</p>
           </div>
-          <button class="status-pill" id="trackingButton" aria-pressed="false"><i></i><span id="trackingLabel">Fog clearing off</span></button>
         </div>
-
-        <div class="stat-grid">
-          <article class="stat-card streak-card">
-            <span class="stat-icon">✦</span>
-            <div><p class="stat-value"><span id="streakCount">4</span> days</p><p class="stat-label">Current streak</p></div>
-          </article>
-          <article class="stat-card">
-            <span class="stat-icon mint">⌁</span>
-            <div><p class="stat-value" id="todayProgress">32%</p><p class="stat-label">Today’s progress</p></div>
-          </article>
-          <article class="stat-card">
-            <span class="stat-icon coral">◎</span>
-            <div><p class="stat-value" id="activityCount">2</p><p class="stat-label">Activities this week</p></div>
-          </article>
-        </div>
-
-        <section class="section-block now-block">
-          <div class="section-heading"><div><p class="eyebrow">KEEP MOVING</p><h2>Your next unlock is close</h2></div><button class="text-button" id="tileInfoButton">View tile</button></div>
-          <article class="next-unlock-card">
-            <div class="mini-hex activated"><span>68%</span></div>
-            <div class="unlock-copy"><h3>Begumpet</h3><p>Stay here for <b id="remainingMinutes">3 more minutes</b>, or log an Activity.</p><div class="progress-track dark"><span id="tileProgressBar"></span></div></div>
-            <button class="arrow-button" id="quickProgressButton" aria-label="Add a minute to current tile">+</button>
-          </article>
-        </section>
-
-        <section class="section-block">
-          <div class="section-heading"><div><p class="eyebrow">MAKE IT COUNT</p><h2>Log an Activity</h2></div></div>
-          <div class="activity-choices">
-            <button class="activity-choice" data-capture="photo"><span class="choice-icon photo-icon">⌘</span><span><b>Capture a moment</b><small>Photo from where you are</small></span></button>
-            <button class="activity-choice" data-capture="voice"><span class="choice-icon voice-icon">◖</span><span><b>Leave a voice note</b><small>A thought, sound, or memory</small></span></button>
-            <button class="activity-choice start-choice" data-capture="session"><span class="choice-icon session-icon">↗</span><span><b>Start an outing</b><small>Group moments as you go</small></span></button>
+        <div class="stat-card">
+          <div class="stat-icon mint">🗺️</div>
+          <div>
+            <p class="stat-value" id="unlockedCount">14</p>
+            <p class="stat-label">Tiles Cleared</p>
           </div>
-        </section>
-
-        <section class="section-block leaderboard-block">
-          <div class="section-heading"><div><p class="eyebrow">THIS WEEK</p><h2>Pilot explorers</h2></div><button class="text-button" id="leaderboardButton">See all</button></div>
-          <ol class="leaderboard" id="leaderboard">
-            <li><span class="rank">1</span><span class="avatar violet">R</span><span class="person">Rhea <small>28 tiles</small></span><b>28</b></li>
-            <li><span class="rank">2</span><span class="avatar gold">K</span><span class="person">Kabir <small>22 tiles</small></span><b>22</b></li>
-            <li class="you"><span class="rank">3</span><span class="avatar user">A</span><span class="person">You <small>14 tiles</small></span><b>14</b></li>
-          </ol>
-        </section>
-      </section>
-    </main>
-
-    <dialog id="activityDialog" class="dialog">
-      <form method="dialog" class="dialog-card" id="activityForm">
-        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
-        <p class="eyebrow" id="dialogEyebrow">NEW ACTIVITY</p>
-        <h2 id="dialogTitle">Capture a moment</h2>
-        <p class="dialog-copy" id="dialogCopy">This prototype will add a boost to the tile you're standing in.</p>
-        <label class="field-label">Name it <small>optional</small><input id="activityName" placeholder="A walk through Begumpet" /></label>
-        <p class="field-label">What kind of moment was it?</p>
-        <div class="category-grid" id="categoryGrid">
-          <button type="button" class="category selected" data-category="Dining">☕ Dining</button>
-          <button type="button" class="category" data-category="Nature & Outdoors">♧ Outdoors</button>
-          <button type="button" class="category" data-category="Sightseeing & Heritage">⌂ Heritage</button>
-          <button type="button" class="category" data-category="Wellness">☼ Wellness</button>
-          <button type="button" class="category" data-category="Travel">↗ Travel</button>
-          <button type="button" class="category" data-category="Nightlife">☾ Nightlife</button>
         </div>
-        <button value="default" class="primary-button" id="saveActivityButton">Save Activity <span>→</span></button>
-      </form>
-    </dialog>
+        <div class="stat-card">
+          <div class="stat-icon coral">📈</div>
+          <div>
+            <p class="stat-value" id="coveragePercent">18%</p>
+            <p class="stat-label">City Coverage</p>
+          </div>
+        </div>
+      </div>
 
-    <div class="toast" id="toast" role="status"></div>
-    <script src="app.js"></script>
-    <script type="module" src="map.js"></script>
-  </body>
+      <!-- Goal Progression Module -->
+      <div class="section-block">
+        <div class="progress-row" style="font-size: 13px; font-weight: 700; margin-bottom: 10px; color: var(--ink);">
+          <span>Overall Map Coverage Goal</span>
+          <span id="todayProgress">32%</span>
+        </div>
+        <div class="progress-track dark" style="height: 10px; margin-bottom: 24px;">
+          <span id="coverageBar" style="width: 18%;"></span>
+        </div>
+        
+        <div class="section-heading">
+          <h2>Next Landmark Unlock</h2>
+          <button class="text-button" type="button">View Milestones &rarr;</button>
+        </div>
+        <div class="next-unlock-card">
+          <div class="mini-hex activated">⏳</div>
+          <div class="unlock-copy">
+            <h3>Hussain Sagar Lake</h3>
+            <p>Explore 4 adjoining tiles nearby to claim this functional cultural checkpoint landmark.</p>
+          </div>
+          <button class="arrow-button" id="leaderboardButton" type="button">&rarr;</button>
+        </div>
+      </div>
+
+      <!-- Quick Actions Activities Capture Engine -->
+      <div class="section-block">
+        <div class="section-heading">
+          <h2>Capture a Moment</h2>
+        </div>
+        <div class="activity-choices">
+          <button class="activity-choice" data-capture="photo" type="button">
+            <span class="choice-icon">📸</span>
+            <b>Snap Photo</b>
+            <small>Boost current tile zone</small>
+          </button>
+          <button class="activity-choice" data-capture="voice" type="button">
+            <span class="choice-icon voice-icon">🎙️</span>
+            <b>Voice Note</b>
+            <small>Log local audio memory</small>
+          </button>
+          <button class="activity-choice" data-capture="session" type="button">
+            <span class="choice-icon session-icon">🚶</span>
+            <b>Start Outing</b>
+            <small>Track multiple tiles live</small>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mock Gamified Pilot Leaderboards Layer -->
+      <div class="section-block leaderboard-block">
+        <div class="section-heading">
+          <h2>Weekly Regional Explorers</h2>
+        </div>
+        <ul class="leaderboard">
+          <li>
+            <span class="rank">01</span>
+            <span class="avatar violet">K</span>
+            <span class="person">Kabir S. <small>Gachibowli</small></span>
+            <b>34 tiles</b>
+          </li>
+          <li class="you">
+            <span class="rank">02</span>
+            <span class="avatar user">A</span>
+            <span class="person">Aarav (You) <small>Begumpet</small></span>
+            <b id="activityCount">2 activities</b>
+          </li>
+          <li>
+            <span class="rank">03</span>
+            <span class="avatar gold">R</span>
+            <span class="person">Riya M. <small>Secunderabad</small></span>
+            <b>19 tiles</b>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Micro Interaction Feedback Components Toast Layer -->
+  <div class="toast" id="toast">Prototype tracking is active.</div>
+
+  <!-- Modals Activity Captures Forms Interacting Engine -->
+  <dialog class="dialog" id="activityDialog">
+    <form class="dialog-card" id="activityForm" method="dialog">
+      <button class="dialog-close" value="cancel" type="submit" aria-label="Close dialog">&times;</button>
+      <h2 id="dialogTitle">Log Activity</h2>
+      <p class="dialog-copy" id="dialogCopy">Save this event entry details to expand validation score status attributes.</p>
+      
+      <label class="field-label">
+        Activity Title or Note
+        <input type="text" placeholder="e.g., Morning walk past the metro station..." required>
+      </label>
+
+      <label class="field-label">
+        Context Category Tags
+        <small>(Select one to categorize this memory segment)</small>
+      </label>
+      <div class="category-grid">
+        <button class="category selected" data-category="Dining" type="button">🍲 Food & Drink</button>
+        <button class="category" data-category="Fitness" type="button">🏃 Exercise</button>
+        <button class="category" data-category="Culture" type="button">🏛️ Landmark</button>
+      </div>
+
+      <button class="primary-button" type="submit">
+        Confirm Entry Details <span>&rarr;</span>
+      </button>
+    </form>
+  </dialog>
+
+  <!-- Core Prototype Engine Logic Boot Injection -->
+  <script src="sources/app.js"></script>
+  <script type="module" src="sources/map.js"></script>
+</body>
 </html>
