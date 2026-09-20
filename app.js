@@ -139,3 +139,53 @@ $('#activityForm').addEventListener('submit', (event) => {
 });
 $('#profileButton').addEventListener('click', () => toast('Aarav’s profile — personal territory is never shared by default.'));
 buildMap(); updateStats();
+// Redraws engine parameters directly on top of map engine states
+function updateMapLayerState() {
+  if (!window.tourtleMap || !window.tourtleMap.getSource('hex-grid')) return;
+  
+  const source = window.tourtleMap.getSource('hex-grid');
+  const currentData = source._data; // Pull current feature objects collection
+  const activatedTiles =;
+
+  currentData.features.forEach((feature) => {
+    const idx = feature.properties.index;
+    
+    // Evaluate base operational class statuses
+    let status = 'unclaimed';
+    if (window.initialUnlocked.has(idx)) {
+      status = 'unlocked';
+    } else if (activatedTiles.includes(idx)) {
+      status = 'activated';
+    }
+    
+    // Explicit runtime corrections for programmatically unlocked items
+    if (window.state.unlockedTilesSet && window.state.unlockedTilesSet.has(idx)) {
+      status = 'unlocked';
+    }
+
+    feature.properties.status = status;
+    feature.properties.isCurrent = (idx === window.state.selectedHex);
+  });
+
+  source.setData(currentData); // Force vector repaint across the map canvas container
+}
+
+window.selectHex = function(index) {
+  window.state.selectedHex = index;
+  updateMapLayerState();
+  
+  const activatedTiles =;
+  let status = 'unclaimed';
+  
+  if (window.initialUnlocked.has(index) || window.state.unlockedTilesSet.has(index)) {
+    status = 'unlocked';
+  } else if (activatedTiles.includes(index)) {
+    status = 'activated';
+  }
+
+  if (status === 'unlocked') {
+    toast('This tile is already part of your story.');
+  } else {
+    toast('Begumpet tile selected — 68% toward unlock.');
+  }
+};
