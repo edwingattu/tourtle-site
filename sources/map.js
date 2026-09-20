@@ -1,28 +1,9 @@
-import * as maplibregl from 'https://unpkg.com@^6.10.0/dist/maplibre-gl.mjs';
+import * as maplibregl from 'https://unpkg.com/maplibre-gl@^6.10.0/dist/maplibre-gl.mjs';
 
 const hyderabad = [78.4867, 17.4375];
 
-const osmStyle = {
-  version: 8,
-  sources: {
-    osm: {
-      type: 'raster',
-      tiles: ['https://openstreetmap.org{z}/{x}/{y}.png'],
-      tileSize: 256,
-      attribution: '© OpenStreetMap contributors',
-    },
-  },
-  layers: [{
-    id: 'osm',
-    type: 'raster',
-    source: 'osm',
-    paint: {
-      'raster-saturation': -0.52,
-      'raster-brightness-min': 0.46,
-      'raster-brightness-max': 0.94,
-    },
-  }],
-};
+// Replaced with a fully valid open-source vector map style URL
+const vectorStyle = 'https://demotiles.maplibre.org/style.json';
 
 // Hexagon generation constants (Geographic scaling mapping coordinates system)
 const hexRadius = 0.0035; // Fine-tuned geographic scale sizing match for city visibility
@@ -49,8 +30,8 @@ function generateHexGridData() {
   const features = [];
   let index = 0;
   
-  // Port core mock array states metrics configuration alignments
-  const activatedTiles =;
+  // Set of Mock Activated Tiles matching baseline index rules
+  const activatedTiles = [3, 4, 5, 10, 14, 19, 23, 28, 32, 37, 41, 46, 49, 55];
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < columns; c++) {
@@ -89,7 +70,7 @@ function generateHexGridData() {
 try {
   const map = new maplibregl.Map({
     container: 'liveMap',
-    style: osmStyle,
+    style: vectorStyle,
     center: hyderabad,
     zoom: 13.0,
     bearing: -9,
@@ -153,7 +134,7 @@ try {
     // Detect feature vector node interaction clicks events processes configurations layers
     map.on('click', 'hex-fills', (e) => {
       if (e.features && e.features.length > 0) {
-        const clickedIndex = e.features[0].properties.index;
+        const clickedIndex = e.features[e.features.length - 1].properties.index;
         if (typeof window.selectHex === 'function') {
           window.selectHex(clickedIndex);
         }

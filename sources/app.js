@@ -1,5 +1,5 @@
 window.state = { unlocked: 14, total: 78, tileProgress: 68, today: 32, streak: 4, activities: 2, tracking: false, category: 'Dining', selectedHex: 32 };
-window.initialUnlocked = new Set([11,12,13,20,21,22,29,30,31,38,39,40,47,48]);
+window.initialUnlocked = new Set([11, 12, 13, 20, 21, 22, 29, 30, 31, 38, 39, 40, 47, 48]);
 window.state.unlockedTilesSet = new Set();
 
 const \$ = (selector) => document.querySelector(selector);
@@ -17,7 +17,7 @@ function updateMapLayerState() {
   
   const source = window.tourtleMap.getSource('hex-grid');
   const currentData = source._data;
-  const activatedTiles =;
+  const activatedTiles = [3, 4, 5, 10, 14, 19, 23, 28, 32, 37, 41, 46, 49, 55];
 
   currentData.features.forEach((feature) => {
     const idx = feature.properties.index;
@@ -44,7 +44,7 @@ window.selectHex = function(index) {
   window.state.selectedHex = index;
   updateMapLayerState();
   
-  const activatedTiles =;
+  const activatedTiles = [3, 4, 5, 10, 14, 19, 23, 28, 32, 37, 41, 46, 49, 55];
   let status = 'unclaimed';
   
   if (window.initialUnlocked.has(index) || window.state.unlockedTilesSet.has(index)) {
