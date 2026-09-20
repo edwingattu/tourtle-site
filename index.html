@@ -3,133 +3,128 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tourtle Web App Prototype</title>
-  <!-- MapLibre GL CSS -->
-  <link href="https://unpkg.com@^6.10.0/dist/maplibre-gl.css" rel="stylesheet" />
-  <link rel="stylesheet" href="sources/style.css">
+  <title>Tourtle — V0 prototype</title>
+  <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+  <link rel="stylesheet" href="app/style.css">
 </head>
 <body>
-
   <div class="app-shell">
-    <!-- Map Panel (Left side / Top on mobile) -->
     <div class="map-panel">
       <div id="liveMap" class="live-map"></div>
-      
-      <!-- Top Branding overlay -->
+
       <div class="map-topbar">
         <a href="#" class="brand">
           <div class="brand-mark">t</div>tourtle
         </a>
-        <button class="icon-button" id="profileButton" type="button" aria-label="View Profile">A</button>
+        <button class="icon-button" id="profileButton" type="button" aria-label="View profile">A</button>
       </div>
 
-      <!-- Action Map Controls -->
+      <div class="map-legend" aria-hidden="true">
+        <span class="legend-chip"><i class="swatch fog"></i>Unclaimed fog</span>
+        <span class="legend-chip"><i class="swatch activated"></i>Activated</span>
+        <span class="legend-chip"><i class="swatch cleared"></i>Unlocked</span>
+      </div>
+
       <div class="map-controls">
-        <button class="map-control" id="recenterButton" type="button" aria-label="Recenter Map">🎯</button>
-        <button class="map-control" id="quickProgressButton" type="button" aria-label="Simulate Movement">+</button>
-        <button class="map-control" id="refreshButton" type="button" aria-label="Sync Map Data">🔄</button>
+        <button class="map-control" id="recenterButton" type="button" aria-label="Recenter map">🎯</button>
+        <button class="map-control" id="quickProgressButton" type="button" aria-label="Walk to the next real tile">+</button>
+        <button class="map-control" id="refreshButton" type="button" aria-label="Sync map data">🔄</button>
       </div>
 
-      <!-- Map Overlay HUD Card Summary -->
       <div class="map-summary">
         <p class="eyebrow" id="trackingLabel">Fog clearing off</p>
-        <h3 class="territory-title" id="tileInfoButton" style="cursor:pointer;">Begumpet, Hyd</h3>
+        <h3 class="territory-title" id="tileInfoButton">Locating tile…</h3>
+        <p class="hex-meta">H3 r9 · <span id="hexId">—</span> · <span id="signalLabel">GPS idle</span></p>
         <div class="progress-row">
-          <span>Tile Progress</span>
-          <span id="remainingMinutes">6 more minutes</span>
+          <span>Tile dwell</span>
+          <span id="remainingMinutes">10 more minutes</span>
         </div>
         <div class="progress-track">
-          <span id="tileProgressBar" style="width: 68%;"></span>
+          <span id="tileProgressBar"></span>
         </div>
       </div>
     </div>
 
-    <!-- Scrollable content and metrics panel (Right side) -->
     <div class="content-panel">
       <div class="content-header">
         <h1>Your World</h1>
         <button class="status-pill" id="trackingButton" type="button" aria-pressed="false">
-          <i></i>Live Tracking
+          <i></i>Live Fog Clearing
         </button>
       </div>
 
-      <!-- Main Dashboard Stats Matrix -->
       <div class="stat-grid">
         <div class="stat-card streak-card">
           <div class="stat-icon">🔥</div>
           <div>
-            <p class="stat-value" id="streakCount">4</p>
-            <p class="stat-label">Day Streak</p>
+            <p class="stat-value" id="streakCount">0</p>
+            <p class="stat-label">Day streak</p>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-icon mint">🗺️</div>
           <div>
-            <p class="stat-value" id="unlockedCount">14</p>
-            <p class="stat-label">Tiles Cleared</p>
+            <p class="stat-value" id="unlockedCount">0</p>
+            <p class="stat-label">Tiles unlocked</p>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-icon coral">📈</div>
           <div>
-            <p class="stat-value" id="coveragePercent">18%</p>
-            <p class="stat-label">City Coverage</p>
+            <p class="stat-value" id="coveragePercent">0%</p>
+            <p class="stat-label">Local coverage</p>
           </div>
         </div>
       </div>
 
-      <!-- Goal Progression Module -->
       <div class="section-block">
         <div class="progress-row" style="font-size: 13px; font-weight: 700; margin-bottom: 10px; color: var(--ink);">
-          <span>Overall Map Coverage Goal</span>
-          <span id="todayProgress">32%</span>
+          <span>Hex coverage near your base</span>
+          <span id="todayProgress">0%</span>
         </div>
         <div class="progress-track dark" style="height: 10px; margin-bottom: 24px;">
-          <span id="coverageBar" style="width: 18%;"></span>
+          <span id="coverageBar"></span>
         </div>
-        
+
         <div class="section-heading">
-          <h2>Next Landmark Unlock</h2>
-          <button class="text-button" type="button">View Milestones &rarr;</button>
+          <h2>How unlocking works</h2>
         </div>
         <div class="next-unlock-card">
-          <div class="mini-hex activated">⏳</div>
+          <div class="mini-hex">⏳</div>
           <div class="unlock-copy">
-            <h3>Hussain Sagar Lake</h3>
-            <p>Explore 4 adjoining tiles nearby to claim this functional cultural checkpoint landmark.</p>
+            <h3>Dwell or Activity</h3>
+            <p>Each hex is an H3 cell over the real street. Ten minutes of cumulative dwell, or an Activity boost, flips it to Unlocked. Neighbors then activate.</p>
           </div>
           <button class="arrow-button" id="leaderboardButton" type="button">&rarr;</button>
         </div>
       </div>
 
-      <!-- Quick Actions Activities Capture Engine -->
       <div class="section-block">
         <div class="section-heading">
-          <h2>Capture a Moment</h2>
+          <h2>Capture a moment <span class="outing-chip" id="outingBadge" hidden>Outing live</span></h2>
         </div>
         <div class="activity-choices">
           <button class="activity-choice" data-capture="photo" type="button">
             <span class="choice-icon">📸</span>
-            <b>Snap Photo</b>
-            <small>Boost current tile zone</small>
+            <b>Snap photo</b>
+            <small>Boost the tile you are in</small>
           </button>
           <button class="activity-choice" data-capture="voice" type="button">
-            <span class="choice-icon voice-icon">🎙️</span>
-            <b>Voice Note</b>
-            <small>Log local audio memory</small>
+            <span class="choice-icon">🎙️</span>
+            <b>Voice note</b>
+            <small>Same boost, tagged to this hex</small>
           </button>
           <button class="activity-choice" data-capture="session" type="button">
-            <span class="choice-icon session-icon">🚶</span>
-            <b>Start Outing</b>
+            <span class="choice-icon">🚶</span>
+            <b>Start outing</b>
             <small>Track multiple tiles live</small>
           </button>
         </div>
       </div>
 
-      <!-- Mock Gamified Pilot Leaderboards Layer -->
       <div class="section-block leaderboard-block">
         <div class="section-heading">
-          <h2>Weekly Regional Explorers</h2>
+          <h2>Weekly regional explorers</h2>
         </div>
         <ul class="leaderboard">
           <li>
@@ -142,7 +137,7 @@
             <span class="rank">02</span>
             <span class="avatar user">A</span>
             <span class="person">Aarav (You) <small>Begumpet</small></span>
-            <b id="activityCount">2 activities</b>
+            <b id="youTiles">0 tiles</b>
           </li>
           <li>
             <span class="rank">03</span>
@@ -155,39 +150,40 @@
     </div>
   </div>
 
-  <!-- Micro Interaction Feedback Components Toast Layer -->
-  <div class="toast" id="toast">Prototype tracking is active.</div>
+  <div class="toast" id="toast">Loading hex fog…</div>
 
-  <!-- Modals Activity Captures Forms Interacting Engine -->
   <dialog class="dialog" id="activityDialog">
     <form class="dialog-card" id="activityForm" method="dialog">
       <button class="dialog-close" value="cancel" type="submit" aria-label="Close dialog">&times;</button>
-      <h2 id="dialogTitle">Log Activity</h2>
-      <p class="dialog-copy" id="dialogCopy">Save this event entry details to expand validation score status attributes.</p>
-      
+      <h2 id="dialogTitle">Log activity</h2>
+      <p class="dialog-copy" id="dialogCopy">Category is chosen when you save, not when you start walking.</p>
+
       <label class="field-label">
-        Activity Title or Note
-        <input type="text" placeholder="e.g., Morning walk past the metro station..." required>
+        Activity title or note
+        <input id="activityTitle" type="text" placeholder="Morning walk past the metro">
       </label>
 
       <label class="field-label">
-        Context Category Tags
-        <small>(Select one to categorize this memory segment)</small>
+        Category
+        <small>Fixed V0 list — stored as data, not user-extensible</small>
       </label>
       <div class="category-grid">
-        <button class="category selected" data-category="Dining" type="button">🍲 Food & Drink</button>
-        <button class="category" data-category="Fitness" type="button">🏃 Exercise</button>
-        <button class="category" data-category="Culture" type="button">🏛️ Landmark</button>
+        <button class="category selected" data-category="dining" type="button">🍲 Dining</button>
+        <button class="category" data-category="sightseeing" type="button">🏛️ Sightseeing</button>
+        <button class="category" data-category="nature" type="button">🌿 Nature</button>
+        <button class="category" data-category="sports" type="button">🏃 Sports</button>
+        <button class="category" data-category="events" type="button">🎟️ Events</button>
+        <button class="category" data-category="nightlife" type="button">🌙 Nightlife</button>
+        <button class="category" data-category="wellness" type="button">🧖 Wellness</button>
+        <button class="category" data-category="travel" type="button">🚶 Travel</button>
       </div>
 
       <button class="primary-button" type="submit">
-        Confirm Entry Details <span>&rarr;</span>
+        Save activity <span>&rarr;</span>
       </button>
     </form>
   </dialog>
 
-  <!-- Core Prototype Engine Logic Boot Injection -->
-  <script src="sources/app.js"></script>
-  <script type="module" src="sources/map.js"></script>
+  <script type="module" src="app/main.js"></script>
 </body>
 </html>

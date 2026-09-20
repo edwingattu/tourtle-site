@@ -11,13 +11,12 @@ const toast = (message) => {
   window.toastTimer = setTimeout(() => el.classList.remove('visible'), 2800); 
 };
 
-// Vector canvas engine dataset synchronizer properties triggers
 function updateMapLayerState() {
   if (!window.tourtleMap || !window.tourtleMap.getSource('hex-grid')) return;
   
   const source = window.tourtleMap.getSource('hex-grid');
   const currentData = source._data;
-  const activatedTiles = [3, 4, 5, 10, 14, 19, 23, 28, 32, 37, 41, 46, 49, 55];
+  const activatedTiles =;
 
   currentData.features.forEach((feature) => {
     const idx = feature.properties.index;
@@ -44,7 +43,7 @@ window.selectHex = function(index) {
   window.state.selectedHex = index;
   updateMapLayerState();
   
-  const activatedTiles = [3, 4, 5, 10, 14, 19, 23, 28, 32, 37, 41, 46, 49, 55];
+  const activatedTiles =;
   let status = 'unclaimed';
   
   if (window.initialUnlocked.has(index) || window.state.unlockedTilesSet.has(index)) {
@@ -56,7 +55,7 @@ window.selectHex = function(index) {
   if (status === 'unlocked') {
     toast('This tile is already part of your story.');
   } else {
-    toast(`Tile zone #${index} selected — 68% toward unlock progress.`);
+    toast(`Begumpet zone #${index} selected — 68% toward unlock progress.`);
   }
 };
 
@@ -142,5 +141,4 @@ document.querySelectorAll('.category').forEach((button) => button.addEventListen
 
 \$('#profileButton').addEventListener('click', () => toast('Aarav’s profile — personal territory is never shared by default.'));
 
-// Trigger initialization load
 updateStats();

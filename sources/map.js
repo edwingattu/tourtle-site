@@ -1,37 +1,37 @@
-import * as maplibregl from 'https://unpkg.com/maplibre-gl@^6.10.0/dist/maplibre-gl.mjs';
+import * as maplibregl from 'https://unpkg.com@^6.10.0/dist/maplibre-gl.mjs';
 
 const hyderabad = [78.4867, 17.4375];
 
-// Replaced with a fully valid open-source vector map style URL
-const vectorStyle = 'https://demotiles.maplibre.org/style.json';
+// High-resolution vector street tile system mapping stylesheet
+const highDefStreetStyle = 'https://openfreemap.org';
 
-// Hexagon generation constants (Geographic scaling mapping coordinates system)
-const hexRadius = 0.0035; // Fine-tuned geographic scale sizing match for city visibility
+// Hexagon layout constraints projected onto geographic coordinates
+const hexRadius = 0.0035; 
 const columns = 9;
 const rows = 7;
 const centerLng = hyderabad[0];
 const centerLat = hyderabad[1];
 
-// Helper method calculates mathematical vertices corner properties array points for polygons boundary sets
+// Calculates map node vertices points for point-top honeycomb geometries
 function getHexPolygon(lng, lat, radius) {
   const coordinates = [];
   for (let i = 0; i < 6; i++) {
-    const angleRad = (Math.PI / 180) * (60 * i - 30); // Pointy top arrangement layout structure
-    const pLng = lng + radius * Math.cos(angleRad) * 1.05; // Compensate aspect variance projection distortion locally
+    const angleRad = (Math.PI / 180) * (60 * i - 30); 
+    const pLng = lng + radius * Math.cos(angleRad) * 1.05; 
     const pLat = lat + radius * Math.sin(angleRad);
     coordinates.push([pLng, pLat]);
   }
-  coordinates.push(coordinates[0]); // Closes loop binding array configuration paths tracking maps definitions
+  coordinates.push(coordinates[0]); 
   return [coordinates];
 }
 
-// Construct dynamic internal map layers geometries representation blocks datasets array sets
+// Packages the honeycomb positions array structures inside standard GeoJSON feature structures
 function generateHexGridData() {
   const features = [];
   let index = 0;
   
-  // Set of Mock Activated Tiles matching baseline index rules
-  const activatedTiles = [3, 4, 5, 10, 14, 19, 23, 28, 32, 37, 41, 46, 49, 55];
+  // Restored full parameters matching the core state data definitions
+  const activatedTiles =;
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < columns; c++) {
@@ -70,26 +70,24 @@ function generateHexGridData() {
 try {
   const map = new maplibregl.Map({
     container: 'liveMap',
-    style: vectorStyle,
+    style: highDefStreetStyle,
     center: hyderabad,
-    zoom: 13.0,
+    zoom: 13.2,
     bearing: -9,
     pitch: 0,
   });
 
-  window.tourtleMap = map; // Expose mapping runtime binding to frame architecture layers cleanly
+  window.tourtleMap = map; 
 
   map.on('load', () => {
     const gridData = generateHexGridData();
 
-    // Injects spatial vector mapping sources properties structures directly inside canvas engines
     map.addSource('hex-grid', {
       type: 'geojson',
       data: gridData,
       promoteId: 'index'
     });
 
-    // Color maps matching structural styling rules variables context designs
     map.addLayer({
       id: 'hex-fills',
       type: 'fill',
@@ -110,7 +108,6 @@ try {
       }
     });
 
-    // Visual strokes boundary definition sets properties
     map.addLayer({
       id: 'hex-borders',
       type: 'line',
@@ -131,24 +128,22 @@ try {
       }
     });
 
-    // Detect feature vector node interaction clicks events processes configurations layers
     map.on('click', 'hex-fills', (e) => {
       if (e.features && e.features.length > 0) {
-        const clickedIndex = e.features[e.features.length - 1].properties.index;
+        const clickedIndex = e.features[0].properties.index;
         if (typeof window.selectHex === 'function') {
           window.selectHex(clickedIndex);
         }
       }
     });
 
-    // Interactive pointer indicators update settings controls
     map.on('mouseenter', 'hex-fills', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'hex-fills', () => { map.getCanvas().style.cursor = ''; });
   });
 
   window.addEventListener('tourtle:recenter', () => {
-    map.easeTo({ center: hyderabad, zoom: 13.0, duration: 750 });
+    map.easeTo({ center: hyderabad, zoom: 13.2, duration: 750 });
   });
 } catch (error) {
-  console.warn('The live map could not be initialized; the prototype background remains available.', error);
+  console.warn('The live map could not be initialized.', error);
 }
