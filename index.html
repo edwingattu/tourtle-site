@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#102a2a" />
+    <title>Tourtle — Explore your everyday</title>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@^6.10.0/dist/maplibre-gl.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="map-panel" aria-label="Tourtle exploration map">
+        <div id="liveMap" class="live-map" aria-label="Map of Hyderabad"></div>
+        <div class="map-topbar">
+          <a class="brand" href="#" aria-label="Tourtle home"><span class="brand-mark">T</span>tourtle</a>
+          <button class="icon-button" id="profileButton" aria-label="Open profile">AE</button>
+        </div>
+
+        <div class="map-label label-one">Begumpet</div>
+        <div class="map-label label-two">Prakash Nagar</div>
+        <div class="map-label label-three">Hussain Sagar</div>
+        <div class="map-label label-four">Ameerpet</div>
+        <div id="hexMap" class="hex-map" aria-label="Exploration tiles"></div>
+        <div id="userDot" class="user-dot" aria-label="Your current position"><span></span></div>
+
+        <div class="map-controls">
+          <button class="map-control" id="recenterButton" aria-label="Recenter map">⌖</button>
+          <button class="map-control" id="refreshButton" aria-label="Refresh fog">↻</button>
+        </div>
+
+        <aside class="map-summary">
+          <p class="eyebrow">YOUR TERRITORY</p>
+          <p class="territory-title">Hyderabad, India</p>
+          <div class="progress-row"><span><b id="unlockedCount">14</b> tiles unlocked</span><span id="coveragePercent">18%</span></div>
+          <div class="progress-track"><span id="coverageBar"></span></div>
+        </aside>
+      </section>
+
+      <section class="content-panel">
+        <div class="content-header">
+          <div>
+            <p class="eyebrow">GOOD EVENING, AARAV</p>
+            <h1>Explore your everyday.</h1>
+          </div>
+          <button class="status-pill" id="trackingButton" aria-pressed="false"><i></i><span id="trackingLabel">Fog clearing off</span></button>
+        </div>
+
+        <div class="stat-grid">
+          <article class="stat-card streak-card">
+            <span class="stat-icon">✦</span>
+            <div><p class="stat-value"><span id="streakCount">4</span> days</p><p class="stat-label">Current streak</p></div>
+          </article>
+          <article class="stat-card">
+            <span class="stat-icon mint">⌁</span>
+            <div><p class="stat-value" id="todayProgress">32%</p><p class="stat-label">Today’s progress</p></div>
+          </article>
+          <article class="stat-card">
+            <span class="stat-icon coral">◎</span>
+            <div><p class="stat-value" id="activityCount">2</p><p class="stat-label">Activities this week</p></div>
+          </article>
+        </div>
+
+        <section class="section-block now-block">
+          <div class="section-heading"><div><p class="eyebrow">KEEP MOVING</p><h2>Your next unlock is close</h2></div><button class="text-button" id="tileInfoButton">View tile</button></div>
+          <article class="next-unlock-card">
+            <div class="mini-hex activated"><span>68%</span></div>
+            <div class="unlock-copy"><h3>Begumpet</h3><p>Stay here for <b id="remainingMinutes">3 more minutes</b>, or log an Activity.</p><div class="progress-track dark"><span id="tileProgressBar"></span></div></div>
+            <button class="arrow-button" id="quickProgressButton" aria-label="Add a minute to current tile">+</button>
+          </article>
+        </section>
+
+        <section class="section-block">
+          <div class="section-heading"><div><p class="eyebrow">MAKE IT COUNT</p><h2>Log an Activity</h2></div></div>
+          <div class="activity-choices">
+            <button class="activity-choice" data-capture="photo"><span class="choice-icon photo-icon">⌘</span><span><b>Capture a moment</b><small>Photo from where you are</small></span></button>
+            <button class="activity-choice" data-capture="voice"><span class="choice-icon voice-icon">◖</span><span><b>Leave a voice note</b><small>A thought, sound, or memory</small></span></button>
+            <button class="activity-choice start-choice" data-capture="session"><span class="choice-icon session-icon">↗</span><span><b>Start an outing</b><small>Group moments as you go</small></span></button>
+          </div>
+        </section>
+
+        <section class="section-block leaderboard-block">
+          <div class="section-heading"><div><p class="eyebrow">THIS WEEK</p><h2>Pilot explorers</h2></div><button class="text-button" id="leaderboardButton">See all</button></div>
+          <ol class="leaderboard" id="leaderboard">
+            <li><span class="rank">1</span><span class="avatar violet">R</span><span class="person">Rhea <small>28 tiles</small></span><b>28</b></li>
+            <li><span class="rank">2</span><span class="avatar gold">K</span><span class="person">Kabir <small>22 tiles</small></span><b>22</b></li>
+            <li class="you"><span class="rank">3</span><span class="avatar user">A</span><span class="person">You <small>14 tiles</small></span><b>14</b></li>
+          </ol>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="activityDialog" class="dialog">
+      <form method="dialog" class="dialog-card" id="activityForm">
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+        <p class="eyebrow" id="dialogEyebrow">NEW ACTIVITY</p>
+        <h2 id="dialogTitle">Capture a moment</h2>
+        <p class="dialog-copy" id="dialogCopy">This prototype will add a boost to the tile you're standing in.</p>
+        <label class="field-label">Name it <small>optional</small><input id="activityName" placeholder="A walk through Begumpet" /></label>
+        <p class="field-label">What kind of moment was it?</p>
+        <div class="category-grid" id="categoryGrid">
+          <button type="button" class="category selected" data-category="Dining">☕ Dining</button>
+          <button type="button" class="category" data-category="Nature & Outdoors">♧ Outdoors</button>
+          <button type="button" class="category" data-category="Sightseeing & Heritage">⌂ Heritage</button>
+          <button type="button" class="category" data-category="Wellness">☼ Wellness</button>
+          <button type="button" class="category" data-category="Travel">↗ Travel</button>
+          <button type="button" class="category" data-category="Nightlife">☾ Nightlife</button>
+        </div>
+        <button value="default" class="primary-button" id="saveActivityButton">Save Activity <span>→</span></button>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script src="app.js"></script>
+    <script type="module" src="map.js"></script>
+  </body>
+</html>
