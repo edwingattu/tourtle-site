@@ -573,3 +573,28 @@ button {
   bottom: 25px; 
   transform: translate(-50%, 130px); 
   opacity: 0; 
+  transition: .35s;
+  background: #173668;
+  color: white;
+  padding: 12px 17px;
+  border-radius: 999px;
+  box-shadow: 0 12px 25px rgba(0,0,0,.2);
+  font-size: 12px;font-weight: 700;white-space: nowrap;
+}
+.toast.visible {transform: translate(-50%, 0);opacity: 1;
+}
+/* Responsiveness overrides rules */
+@media (max-width: 840px) 
+{.app-shell 
+    { 
+        display: block;
+    }
+ .map-panel 
+ { 
+    position: relative; 
+    min-height: 50vh; 
+    height: 500px; 
+}
+.content-panel
+ { padding: 32px 22px 44px; }
+}
