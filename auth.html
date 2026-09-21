@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tourtle — Sign up / Log in</title>
+  <link rel="stylesheet" href="app/style.css">
+  <style>
+    .auth-shell {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px 18px;
+      background:
+        radial-gradient(600px 400px at 15% 10%, #e0effd 0%, transparent 60%),
+        radial-gradient(700px 500px at 90% 90%, #ffe2d9 0%, transparent 55%),
+        var(--paper);
+    }
+    .auth-card {
+      width: min(440px, 100%);
+      background: #fffefa;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 34px 30px 28px;
+      box-shadow: 0 20px 60px rgba(17, 47, 80, 0.12);
+    }
+    .auth-card .brand { margin-bottom: 18px; }
+    .auth-card h1 {
+      font: 600 32px/1.1 Fraunces, serif;
+      letter-spacing: -0.04em;
+      margin: 0 0 8px;
+    }
+    .auth-copy { color: #687b90; font-size: 13px; line-height: 1.55; margin: 0 0 22px; }
+    .google-btn {
+      width: 100%;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      border: 1px solid #d8e3ee; background: #fff; border-radius: 12px;
+      padding: 13px 14px; font-weight: 800; font-size: 13px; color: var(--ink);
+    }
+    .google-btn:hover { border-color: #a8caea; }
+    .divider {
+      display: flex; align-items: center; gap: 10px;
+      color: #84908a; font-size: 11px; font-weight: 700;
+      margin: 18px 0 14px;
+    }
+    .divider::before, .divider::after {
+      content: ""; height: 1px; background: var(--line); flex: 1;
+    }
+    .auth-field { display: block; font-size: 12px; font-weight: 800; margin: 0 0 10px; }
+    .auth-field input {
+      display: block; width: 100%; margin-top: 7px;
+      border: 1px solid #d8e3ee; background: #fff; border-radius: 10px;
+      padding: 12px; outline-color: #4c8fcf;
+    }
+    .auth-hint { font-size: 11px; color: #84908a; line-height: 1.5; margin: 12px 0 0; }
+    .auth-status { font-size: 12px; font-weight: 700; margin: 12px 0 0; min-height: 18px; }
+    .auth-status.ok { color: #1f8a4c; }
+    .auth-status.err { color: #c0392b; }
+  </style>
+</head>
+<body>
+  <div class="auth-shell">
+    <div class="auth-card">
+      <a href="./index.html" class="brand">
+        <div class="brand-mark">t</div>tourtle
+      </a>
+      <h1>Start exploring</h1>
+      <p class="auth-copy">Sign up or log in to save your fog progress. We use your login only for your personal territory — never shared by default.</p>
+
+      <button class="google-btn" id="googleButton" type="button">
+        <span aria-hidden="true">G</span> Continue with Google
+      </button>
+
+      <div class="divider">or continue with email</div>
+
+      <form id="emailForm">
+        <label class="auth-field">
+          Email address
+          <input id="emailInput" type="email" required autocomplete="email" placeholder="you@example.com">
+        </label>
+        <button class="primary-button" type="submit" id="emailSubmit">
+          Send magic link <span>&rarr;</span>
+        </button>
+      </form>
+
+      <p class="auth-status" id="authStatus" role="status"></p>
+      <p class="auth-hint">Email login sends a one-click magic link — no password needed. Location, camera and microphone are only used for fog clearing and Activity captures, after your explicit permission.</p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { getSession, sendMagicLink, signInWithGoogle, supabase } from './app/auth.js';
+
+    const statusEl = document.querySelector('#authStatus');
+    const googleBtn = document.querySelector('#googleButton');
+    const form = document.querySelector('#emailForm');
+    const emailInput = document.querySelector('#emailInput');
+    const submitBtn = document.querySelector('#emailSubmit');
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('error')) {
+      statusEl.textContent = 'Sign-in failed: ' + params.get('error');
+      statusEl.className = 'auth-status err';
+    }
+
+    // Already signed in? Go straight to the app.
+    getSession().then((session) => {
+      if (session) window.location.replace('./index.html');
+    });
+
+    // Magic-link / OAuth redirect landing back on auth.html (e.g. misconfigured
+    // Site URL): pick up the session then forward to the app.
+    supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+        window.location.replace('./index.html');
+      }
+    });
+
+    googleBtn.addEventListener('click', async () => {
+      statusEl.textContent = 'Opening Google…';
+      statusEl.className = 'auth-status';
+      try {
+        await signInWithGoogle();
+      } catch (e) {
+        statusEl.textContent = e.message || 'Google sign-in failed.';
+        statusEl.className = 'auth-status err';
+      }
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = emailInput.value.trim();
+      if (!email) return;
+      submitBtn.disabled = true;
+      statusEl.textContent = 'Sending magic link…';
+      statusEl.className = 'auth-status';
+      try {
+        await sendMagicLink(email);
+        statusEl.textContent = 'Check your inbox — tap the magic link on this device to finish signing in.';
+        statusEl.className = 'auth-status ok';
+      } catch (err) {
+        statusEl.textContent = err.message || 'Could not send magic link.';
+        statusEl.className = 'auth-status err';
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,4 +1,5 @@
 import { CONFIG, DEMO_WALK } from './config.js';
+import { getSession, requireSessionOrRedirect, signOut } from './auth.js';
 import {
   bearingBetween,
   cellAt,
@@ -10,6 +11,12 @@ import {
 import { createMap } from './map.js';
 
 const $ = (sel) => document.querySelector(sel);
+
+// Auth gate: unauthenticated visitors go to auth.html (Google + magic link).
+// Throws/redirects when signed out, so nothing below runs without a user.
+const session = await requireSessionOrRedirect();
+const currentUser = session.user;
+
 const engine = createEngine();
 const mapView = createMap({
   onHexSelect: (cell) => selectCell(cell, { toastOnSelect: true }),
@@ -114,7 +121,8 @@ function renderHud() {
   $('#coverageBar').style.width = `${coverage}%`;
   $('#todayProgress').textContent = `${coverage}%`;
   $('#streakCount').textContent = snap.streakDays;
-  $('#activityCount').textContent = `${snap.activities.length} activities`;
+  const activityCountEl = $('#activityCount');
+  if (activityCountEl) activityCountEl.textContent = `${snap.activities.length} activities`;
   $('#tileProgressBar').style.width = `${progressPercent(rec)}%`;
   $('#remainingMinutes').textContent = remainingLabel(rec);
   $('#youTiles').textContent = `${snap.unlockedCount} tiles`;
@@ -223,9 +231,23 @@ function bindUi() {
   $('#leaderboardButton').addEventListener('click', () => {
     toast('Pilot leaderboard stays private to invited testers.');
   });
-  $('#profileButton').addEventListener('click', () => {
-    toast('Personal territory is never shared by default.');
+  $('#profileButton').addEventListener('click', async () => {
+    const email = currentUser?.email || 'Signed in';
+    if (window.confirm(`${email}\n\nPersonal territory is never shared by default.\n\nOK = stay signed in\nCancel = sign out`)) {
+      toast('Personal territory is never shared by default.');
+      return;
+    }
+    try {
+      await signOut();
+    } finally {
+      window.location.replace('./auth.html');
+    }
   });
+
+  // Personalize avatar + leaderboard label from auth user.
+  const initial = (currentUser?.email || 'A').trim().charAt(0).toUpperCase() || 'A';
+  const profileBtn = $('#profileButton');
+  if (profileBtn) profileBtn.textContent = initial;
 
   document.querySelectorAll('[data-capture]').forEach((button) => {
     button.addEventListener('click', () => {

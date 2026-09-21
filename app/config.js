@@ -15,6 +15,10 @@ export const CONFIG = {
   defaultZoom: 14.1,
   coverageRingK: 12,
   nominatimUrl: 'https://nominatim.openstreetmap.org/reverse',
+  supabaseUrl: 'https://ftfcwxifezbzlfdbhxqy.supabase.co',
+  supabaseAnonKey:
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ0ZmN3eGlmZXpiemxmZGJoeHF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4MDA3MzUsImV4cCI6MjEwNTM3NjczNX0.HfXq80w9kJdrbZQYRh5EbfUSUpsNM6y9iJj8vct2T34',
+  appUrl: 'https://www.gruffy.in',
 };
 
 export const CATEGORIES = [
