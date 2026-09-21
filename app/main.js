@@ -21,6 +21,10 @@ const engine = createEngine();
 const mapView = createMap({
   onHexSelect: (cell) => selectCell(cell, { toastOnSelect: true }),
   onMove: () => mapView.paint(engine.getSnapshot().store),
+  onLevelSelect: (band, props) => {
+    const detail = props.status === 'unclaimed' ? '' : ` · ${props.frac}% explored`;
+    toast(`${props.name} · ${props.status}${detail}`);
+  },
 });
 
 const locationFilter = {

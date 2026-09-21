@@ -5,6 +5,10 @@ export const CONFIG = {
   activityBoostMs: 5 * 60 * 1000,
   outingInactivityMs: 2 * 60 * 60 * 1000,
   maxRenderCells: 2800,
+  // Semantic tiles: an area unlocks at 30% of member hexes (min 2, so tiny
+  // areas still pass through activated first). Same rule rolls up every level.
+  areaUnlockFraction: 0.3,
+  areaUnlockMin: 2,
   implausibleSpeedMps: 55,
   weakAccuracyM: 85,
   smoothWindow: 5,
