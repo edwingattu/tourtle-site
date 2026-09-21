@@ -23,8 +23,8 @@ function packUrl(name) {
 export async function loadCore() {
   if (!packs.meta) {
     const [meta, areas] = await Promise.all([
-      fetch(packUrl('meta.json')).then((r) => r.json()),
-      fetch(packUrl('areas.json')).then((r) => r.json()),
+      fetch(packUrl('meta')).then((r) => r.json()),
+      fetch(packUrl('areas')).then((r) => r.json()),
     ]);
     packs.meta = meta;
     packs.areas = areas;
@@ -51,7 +51,7 @@ export function ensureLevel(level) {
   if (!need.length) return Promise.resolve(false);
   const jobs = need.map((n) => {
     if (!loading[n]) {
-      loading[n] = fetch(packUrl(`${n}.json`))
+      loading[n] = fetch(packUrl(n))
         .then((r) => r.json())
         .then((j) => {
           packs[n] = j;
