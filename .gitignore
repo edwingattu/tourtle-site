@@ -1,0 +1,48 @@
+# =========================================================================
+# UNIVERSAL GITIGNORE TEMPLATE
+# =========================================================================
+
+# --- Operating System Files ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# --- Common IDEs and Editors ---
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*~
+
+# --- Environments & Secrets ---
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+*.cert
+client_secret_588503458168-278ldrujfjapjdjqm0veeh9finjr0lpv.apps.googleusercontent.com.json
+
+# --- Common Package Logs ---
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Temporary Files & Diagnostics ---
+tmp/
+temp/
+.cache/
+.eslintcache
