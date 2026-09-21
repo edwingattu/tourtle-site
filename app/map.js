@@ -24,31 +24,95 @@ export function createMap({ onHexSelect, onMove }) {
   let selectedCell = null;
   let userLngLat = CONFIG.defaultCenter;
 
-  function fogCollection(store) {
-    const zoom = map.getZoom();
-    if (zoom < CONFIG.minFogZoom) {
-      return { type: 'FeatureCollection', features: [] };
+  // ---- Paint scheduler + caches (perf) ----
+  // paint() is called up to twice per second (dwell tick + HUD) plus on every
+  // pan/zoom. Rebuilding 2800 H3 polygons + setData each time blocks the main
+  // thread and janks panning. So: coalesce calls into one rAF, reuse cached
+  // geometry for an unchanged viewport, and skip setData entirely when no
+  // tile status actually changed.
+  let paintQueued = false;
+  let pendingStore = null;
+  let lastFogKey = null;
+  let lastStatusSig = null;
+  let lastActSig = null;
+  let cachedCellsKey = null;
+  let cachedCells = [];
+  const boundaryCache = new Map();
+  const BOUNDARY_CACHE_MAX = 20000;
+
+  function viewportKey() {
+    const b = map.getBounds();
+    const z = map.getZoom();
+    const r = (n) => n.toFixed(4);
+    return `${z.toFixed(2)}|${r(b.getNorth())}|${r(b.getSouth())}|${r(b.getEast())}|${r(b.getWest())}`;
+  }
+
+  function boundaryFor(cell) {
+    let ring = boundaryCache.get(cell);
+    if (!ring) {
+      ring = cellBoundary(cell);
+      if (boundaryCache.size > BOUNDARY_CACHE_MAX) boundaryCache.clear();
+      boundaryCache.set(cell, ring);
     }
-    const cells = cellsInBounds(map.getBounds());
-    if (cells.length > CONFIG.maxRenderCells) {
-      return { type: 'FeatureCollection', features: [] };
+    return ring;
+  }
+
+  const EMPTY_COLLECTION = { type: 'FeatureCollection', features: [] };
+
+  function doPaint(store) {
+    const fogSource = map.getSource('hex-fog');
+    const pinsSource = map.getSource('activities');
+
+    if (map.getZoom() < CONFIG.minFogZoom) {
+      if (fogSource && lastFogKey !== 'empty') {
+        fogSource.setData(EMPTY_COLLECTION);
+        lastFogKey = 'empty';
+        lastStatusSig = null;
+      }
+    } else {
+      const key = viewportKey();
+      let cells;
+      if (key === cachedCellsKey) {
+        cells = cachedCells;
+      } else {
+        cells = cellsInBounds(map.getBounds());
+        cachedCellsKey = key;
+        cachedCells = cells;
+      }
+      if (cells.length > CONFIG.maxRenderCells) {
+        if (fogSource && lastFogKey !== 'empty') {
+          fogSource.setData(EMPTY_COLLECTION);
+          lastFogKey = 'empty';
+          lastStatusSig = null;
+        }
+      } else {
+        const neighborSet = unlockedNeighborSet(store);
+        const statuses = new Array(cells.length);
+        for (let i = 0; i < cells.length; i++) {
+          statuses[i] = tileStatus(cells[i], store, neighborSet);
+        }
+        const sig = statuses.join(',');
+        if (fogSource && (sig !== lastStatusSig || key !== lastFogKey)) {
+          fogSource.setData({
+            type: 'FeatureCollection',
+            features: cells.map((cell, i) => ({
+              type: 'Feature',
+              properties: { h3: cell, status: statuses[i] },
+              geometry: { type: 'Polygon', coordinates: [boundaryFor(cell)] },
+            })),
+          });
+          lastStatusSig = sig;
+          lastFogKey = key;
+        }
+      }
     }
-    const neighborSet = unlockedNeighborSet(store);
-    return {
-      type: 'FeatureCollection',
-      features: cells.map((cell) => ({
-        type: 'Feature',
-        id: cell,
-        properties: {
-          h3: cell,
-          status: tileStatus(cell, store, neighborSet),
-        },
-        geometry: {
-          type: 'Polygon',
-          coordinates: [cellBoundary(cell)],
-        },
-      })),
-    };
+
+    const acts = store.activities || [];
+    const actSig = `${acts.length}:${acts.length ? acts[acts.length - 1].createdAt : 0}`;
+    if (pinsSource && actSig !== lastActSig) {
+      pinsSource.setData(activityCollection(acts));
+      lastActSig = actSig;
+    }
   }
 
   function activityCollection(activities) {
@@ -147,10 +211,17 @@ export function createMap({ onHexSelect, onMove }) {
       return map.loaded() ? Promise.resolve() : new Promise((resolve) => map.once('load', resolve));
     },
     paint(store) {
-      const source = map.getSource('hex-fog');
-      if (source) source.setData(fogCollection(store));
-      const pins = map.getSource('activities');
-      if (pins) pins.setData(activityCollection(store.activities || []));
+      // Coalesce bursts (tick + HUD paint in the same second, pan + tick,
+      // select + HUD) into a single repaint on the next animation frame.
+      pendingStore = store;
+      if (paintQueued) return;
+      paintQueued = true;
+      requestAnimationFrame(() => {
+        paintQueued = false;
+        const next = pendingStore;
+        pendingStore = null;
+        if (next) doPaint(next);
+      });
     },
     setSelected(cell) {
       selectedCell = cell;
