@@ -42,7 +42,6 @@ export function createMap({ onHexSelect, onMove }) {
         properties: {
           h3: cell,
           status: tileStatus(cell, store, neighborSet),
-          isCurrent: cell === selectedCell,
         },
         geometry: {
           type: 'Polygon',
@@ -72,19 +71,23 @@ export function createMap({ onHexSelect, onMove }) {
     map.addSource('hex-fog', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addSource('activities', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
+    // Single seamless fill layer — no border/line layer by design.
+    // Adjacent H3 cells share exact edges; antialiasing is off so no
+    // hairline seams appear between tiles.
     map.addLayer({
       id: 'hex-fills',
       type: 'fill',
       source: 'hex-fog',
       paint: {
+        'fill-antialias': false,
         'fill-color': [
           'match',
           ['get', 'status'],
           'unlocked',
           'rgba(0,0,0,0)',
           'activated',
-          '#9bdaff',
-          '#4b5d70',
+          '#87c9f5',
+          '#3e4a57',
         ],
         'fill-opacity': [
           'match',
@@ -92,34 +95,8 @@ export function createMap({ onHexSelect, onMove }) {
           'unlocked',
           0,
           'activated',
-          0.38,
-          0.55,
-        ],
-      },
-    });
-
-    map.addLayer({
-      id: 'hex-borders',
-      type: 'line',
-      source: 'hex-fog',
-      paint: {
-        'line-color': [
-          'case',
-          ['boolean', ['get', 'isCurrent'], false],
-          '#ff836b',
-          ['==', ['get', 'status'], 'unlocked'],
-          '#2465a7',
-          ['==', ['get', 'status'], 'activated'],
-          'rgba(36, 101, 167, 0.55)',
-          'rgba(20, 40, 60, 0.22)',
-        ],
-        'line-width': [
-          'case',
-          ['boolean', ['get', 'isCurrent'], false],
-          3.4,
-          ['==', ['get', 'status'], 'unlocked'],
-          2.2,
-          0.8,
+          0.42,
+          0.62,
         ],
       },
     });
