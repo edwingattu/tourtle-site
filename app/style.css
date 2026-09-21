@@ -33,17 +33,17 @@ button {
 }
 
 .app-shell {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(430px, 45vw) 1fr;
+  height: 100dvh;
+  overflow: hidden;
+  display: block;
 }
 
 .map-panel {
-  min-height: 100vh;
-  position: sticky;
-  top: 0;
+  position: relative;
+  height: 100dvh;
   background: #d9e8f5;
   isolation: isolate;
+  overflow: hidden;
 }
 
 .live-map {
@@ -161,18 +161,76 @@ button {
   border: 2px solid #2465a7;
 }
 
-.map-summary {
+.map-control svg {
+  display: block;
+}
+
+.bottom-card {
   position: absolute;
-  z-index: 3;
-  left: 25px;
-  right: 25px;
-  bottom: 25px;
+  z-index: 4;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   border: 1px solid rgba(255, 255, 255, 0.6);
-  background: rgba(248, 247, 242, 0.88);
+  background: rgba(248, 247, 242, 0.94);
   border-radius: 18px;
-  padding: 16px 17px;
-  box-shadow: 0 10px 30px rgba(15, 64, 54, 0.12);
+  box-shadow: 0 10px 30px rgba(15, 64, 54, 0.16);
   backdrop-filter: blur(8px);
+  max-height: calc(100dvh - 170px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.map-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 17px;
+  cursor: pointer;
+  flex: none;
+}
+
+.summary-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.expand-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: white;
+  margin-top: 2px;
+  transition: transform 0.25s ease;
+}
+
+.bottom-card.expanded .expand-icon {
+  transform: rotate(180deg);
+}
+
+.detail-content {
+  display: none;
+  overflow-y: auto;
+  padding: 4px 17px 20px;
+  border-top: 1px solid var(--line);
+  -webkit-overflow-scrolling: touch;
+}
+
+.bottom-card.expanded .detail-content {
+  display: block;
+}
+
+@media (min-width: 700px) {
+  .bottom-card {
+    left: 25px;
+    right: auto;
+    width: min(430px, calc(100vw - 50px));
+  }
 }
 
 .eyebrow {
@@ -228,15 +286,9 @@ button {
   box-shadow: 0 0 0 8px rgba(42, 105, 170, 0.18);
 }
 
-.content-panel {
-  padding: 45px clamp(28px, 5vw, 75px) 52px;
-  max-width: 940px;
-  width: 100%;
-  margin: auto;
-}
-
 .content-header {
   gap: 20px;
+  padding-top: 18px;
 }
 
 .content-header h1 {
@@ -669,19 +721,27 @@ button {
   opacity: 1;
 }
 
+.stat-icon svg,
+.choice-icon svg,
+.mini-hex svg,
+.arrow-button svg,
+.primary-button svg {
+  display: block;
+}
+
+.primary-button svg {
+  flex: none;
+}
+
 @media (max-width: 840px) {
-  .app-shell {
-    display: block;
+  .stat-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin: 22px 0 26px;
   }
-  .map-panel {
-    position: relative;
-    min-height: 50vh;
-    height: 520px;
+  .stat-card {
+    padding: 12px 10px;
   }
-  .content-panel {
-    padding: 32px 22px 44px;
-  }
-  .stat-grid,
   .activity-choices {
     grid-template-columns: 1fr;
   }

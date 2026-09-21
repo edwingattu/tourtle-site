@@ -204,6 +204,23 @@ function openDialog(type) {
 }
 
 function bindUi() {
+  const bottomCard = $('#bottomCard');
+  const summaryToggle = $('#summaryToggle');
+  const setExpanded = (on) => {
+    bottomCard?.classList.toggle('expanded', on);
+    summaryToggle?.setAttribute('aria-expanded', String(on));
+    summaryToggle?.setAttribute('aria-label', on ? 'Collapse details' : 'Expand details');
+  };
+  summaryToggle?.addEventListener('click', () => {
+    setExpanded(!bottomCard?.classList.contains('expanded'));
+  });
+  summaryToggle?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setExpanded(!bottomCard?.classList.contains('expanded'));
+    }
+  });
+
   $('#trackingButton').addEventListener('click', () => setTracking(!tracking));
   $('#quickProgressButton').addEventListener('click', simulateStep);
   $('#refreshButton').addEventListener('click', () => {
@@ -223,7 +240,8 @@ function bindUi() {
     mapView.recenter();
     toast('Centered on your current tile.');
   });
-  $('#tileInfoButton').addEventListener('click', () => {
+  $('#tileInfoButton').addEventListener('click', (e) => {
+    e.stopPropagation();
     const snap = engine.getSnapshot();
     const info = mapView.inspectCell(snap.store, selectedCell);
     toast(`${info.status} · H3 ${info.cell} · ${progressPercent(info.rec)}% dwell`);

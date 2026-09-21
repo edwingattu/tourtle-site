@@ -22,14 +22,14 @@ export const CONFIG = {
 };
 
 export const CATEGORIES = [
-  { id: 'sightseeing', label: 'Sightseeing & Heritage', short: 'Heritage', icon: '🏛️' },
-  { id: 'dining', label: 'Dining', short: 'Dining', icon: '🍲' },
-  { id: 'nature', label: 'Nature & Outdoors', short: 'Nature', icon: '🌿' },
-  { id: 'sports', label: 'Sports & Adventure', short: 'Sports', icon: '🏃' },
-  { id: 'events', label: 'Events', short: 'Events', icon: '🎟️' },
-  { id: 'nightlife', label: 'Nightlife', short: 'Nightlife', icon: '🌙' },
-  { id: 'wellness', label: 'Wellness', short: 'Wellness', icon: '🧖' },
-  { id: 'travel', label: 'Travel', short: 'Travel', icon: '🚶' },
+  { id: 'sightseeing', label: 'Sightseeing & Heritage', short: 'Heritage', icon: 'landmark' },
+  { id: 'dining', label: 'Dining', short: 'Dining', icon: 'dining' },
+  { id: 'nature', label: 'Nature & Outdoors', short: 'Nature', icon: 'nature' },
+  { id: 'sports', label: 'Sports & Adventure', short: 'Sports', icon: 'sports' },
+  { id: 'events', label: 'Events', short: 'Events', icon: 'events' },
+  { id: 'nightlife', label: 'Nightlife', short: 'Nightlife', icon: 'nightlife' },
+  { id: 'wellness', label: 'Wellness', short: 'Wellness', icon: 'wellness' },
+  { id: 'travel', label: 'Travel', short: 'Travel', icon: 'travel' },
 ];
 
 export const CATEGORY_COLORS = {
