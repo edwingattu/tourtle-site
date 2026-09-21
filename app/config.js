@@ -5,7 +5,6 @@ export const CONFIG = {
   activityBoostMs: 5 * 60 * 1000,
   outingInactivityMs: 2 * 60 * 60 * 1000,
   maxRenderCells: 2800,
-  minFogZoom: 11.2,
   implausibleSpeedMps: 55,
   weakAccuracyM: 85,
   smoothWindow: 5,

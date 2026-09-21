@@ -5,9 +5,13 @@ import {
   cellAt,
   cellBoundary,
   cellCenter,
+  cellResolution,
   cellsInBounds,
+  childrenOf,
   diskCells,
   gridDistance,
+  neighbors,
+  parentCell,
   tileStatus,
   unlockedNeighborSet,
   isUnlocked,
@@ -82,6 +86,72 @@ export function createMap({ onHexSelect, onMove }) {
     return out;
   }
 
+  // ---- Resolution ladder: fog at every zoom ----
+  // Res-9 cells for a zoomed-out viewport would be millions of polygons, so
+  // coarser parent cells render instead (same 3 tints, statuses aggregated
+  // from the res-9 store). An adaptive loop guarantees a render: step down
+  // while over budget, one refinement step up via children when it fits.
+  function fogResolutionForZoom(zoom) {
+    if (zoom >= 13) return 9;
+    if (zoom >= 11) return 8;
+    if (zoom >= 9) return 7;
+    if (zoom >= 7) return 6;
+    if (zoom >= 5) return 4;
+    if (zoom >= 3) return 3;
+    return 2;
+  }
+
+  function coarseStatusMaps(store, res) {
+    const unlocked = new Set();
+    const touched = new Set();
+    const entries = Object.entries(store.tiles);
+    for (const [cell, rec] of entries) {
+      const anc = parentCell(cell, res);
+      if (isUnlocked(rec)) unlocked.add(anc);
+      else touched.add(anc);
+    }
+    // Mirror the res-9 rule: an unlocked tile activates its neighbors.
+    for (const [cell, rec] of entries) {
+      if (!isUnlocked(rec)) continue;
+      for (const nb of neighbors(cell)) {
+        const a = parentCell(nb, res);
+        if (!unlocked.has(a)) touched.add(a);
+      }
+    }
+    return { unlocked, touched };
+  }
+
+  function resolveCells(bounds, centerCell, zoom) {
+    // Res 9 inside the cached city disk: slice, no polyfill at all.
+    if (fogResolutionForZoom(zoom) === CONFIG.h3Resolution && cityCovers(centerCell)) {
+      return { res: CONFIG.h3Resolution, cells: sliceCityCells(bounds) };
+    }
+    const guess = fogResolutionForZoom(zoom);
+    const key = `${viewportKey()}#${guess}`;
+    if (key === cachedCellsKey) return cachedCells;
+    let res = guess;
+    let cells = cellsInBounds(bounds, res);
+    let guard = 0;
+    while (cells.length > CONFIG.maxRenderCells && res > 1 && guard++ < 5) {
+      res -= 1;
+      cells = cellsInBounds(bounds, res);
+    }
+    // One refinement step via children (cheap, no polyfill) when it fits.
+    if (res < CONFIG.h3Resolution && cells.length * 7 <= CONFIG.maxRenderCells) {
+      const kids = [];
+      for (const c of cells) {
+        const ch = childrenOf(c, res + 1);
+        for (const k of ch) kids.push(k);
+      }
+      res += 1;
+      cells = kids;
+    }
+    const out = { res, cells };
+    cachedCellsKey = key;
+    cachedCells = out;
+    return out;
+  }
+
   function viewportKey() {
     const b = map.getBounds();
     const z = map.getZoom();
@@ -107,51 +177,44 @@ export function createMap({ onHexSelect, onMove }) {
 
     if (store.baseCell) ensureCityCache(store.baseCell);
 
-    if (map.getZoom() < CONFIG.minFogZoom) {
+    const bounds = map.getBounds();
+    const c = map.getCenter();
+    const { res, cells } = resolveCells(bounds, cellAt(c.lat, c.lng), map.getZoom());
+    if (cells.length > CONFIG.maxRenderCells) {
       if (fogSource && lastFogKey !== 'empty') {
         fogSource.setData(EMPTY_COLLECTION);
         lastFogKey = 'empty';
         lastStatusSig = null;
       }
     } else {
-      const bounds = map.getBounds();
-      const key = viewportKey();
-      let cells;
-      const c = map.getCenter();
-      if (cityCovers(cellAt(c.lat, c.lng))) {
-        cells = sliceCityCells(bounds);
-      } else if (key === cachedCellsKey) {
-        cells = cachedCells;
-      } else {
-        cells = cellsInBounds(bounds);
-        cachedCellsKey = key;
-        cachedCells = cells;
-      }
-      if (cells.length > CONFIG.maxRenderCells) {
-        if (fogSource && lastFogKey !== 'empty') {
-          fogSource.setData(EMPTY_COLLECTION);
-          lastFogKey = 'empty';
-          lastStatusSig = null;
-        }
-      } else {
+      let statuses;
+      if (res === CONFIG.h3Resolution) {
         const neighborSet = unlockedNeighborSet(store);
-        const statuses = new Array(cells.length);
+        statuses = new Array(cells.length);
         for (let i = 0; i < cells.length; i++) {
           statuses[i] = tileStatus(cells[i], store, neighborSet);
         }
-        const sig = statuses.join(',');
-        if (fogSource && (sig !== lastStatusSig || key !== lastFogKey)) {
-          fogSource.setData({
-            type: 'FeatureCollection',
-            features: cells.map((cell, i) => ({
-              type: 'Feature',
-              properties: { h3: cell, status: statuses[i] },
-              geometry: { type: 'Polygon', coordinates: [boundaryFor(cell)] },
-            })),
-          });
-          lastStatusSig = sig;
-          lastFogKey = key;
+      } else {
+        const { unlocked, touched } = coarseStatusMaps(store, res);
+        statuses = new Array(cells.length);
+        for (let i = 0; i < cells.length; i++) {
+          const cell = cells[i];
+          statuses[i] = unlocked.has(cell) ? 'unlocked' : touched.has(cell) ? 'activated' : 'unclaimed';
         }
+      }
+      const sig = `${res}:${statuses.join(',')}`;
+      const key = viewportKey();
+      if (fogSource && (sig !== lastStatusSig || key !== lastFogKey)) {
+        fogSource.setData({
+          type: 'FeatureCollection',
+          features: cells.map((cell, i) => ({
+            type: 'Feature',
+            properties: { h3: cell, status: statuses[i] },
+            geometry: { type: 'Polygon', coordinates: [boundaryFor(cell)] },
+          })),
+        });
+        lastStatusSig = sig;
+        lastFogKey = key;
       }
     }
 
@@ -241,16 +304,16 @@ export function createMap({ onHexSelect, onMove }) {
 
     let moveTimer = 0;
     const refreshViewport = () => {
-      onMove?.({
-        zoom: map.getZoom(),
-        cellCountHint: map.getZoom() < CONFIG.minFogZoom ? 0 : 1,
-      });
+      onMove?.({ zoom: map.getZoom(), cellCountHint: 1 });
     };
     map.on('moveend', () => {
       window.clearTimeout(moveTimer);
       moveTimer = window.setTimeout(refreshViewport, 80);
     });
     map.on('zoomend', refreshViewport);
+    // Track gestures live: paints are rAF-coalesced and status-skipped, so
+    // per-frame cost is one small polyfill (or a cache slice) at most.
+    map.on('move', refreshViewport);
   });
 
   return {
@@ -292,15 +355,21 @@ export function createMap({ onHexSelect, onMove }) {
       return cellCenter(cell);
     },
     inspectCell(store, cell) {
-      const rec = store.tiles[cell];
-      const neighborSet = unlockedNeighborSet(store);
-      return {
-        cell,
-        status: tileStatus(cell, store, neighborSet),
-        rec,
-        unlocked: isUnlocked(rec),
-        center: cellCenter(cell),
-      };
+      if (cellResolution(cell) === CONFIG.h3Resolution) {
+        const rec = store.tiles[cell];
+        const neighborSet = unlockedNeighborSet(store);
+        return {
+          cell,
+          status: tileStatus(cell, store, neighborSet),
+          rec,
+          unlocked: isUnlocked(rec),
+          center: cellCenter(cell),
+        };
+      }
+      // Coarse fog cell tapped while zoomed out: aggregate from the res-9 store.
+      const { unlocked, touched } = coarseStatusMaps(store, cellResolution(cell));
+      const status = unlocked.has(cell) ? 'unlocked' : touched.has(cell) ? 'activated' : 'unclaimed';
+      return { cell, status, rec: store.tiles[cell], unlocked: status === 'unlocked', center: cellCenter(cell) };
     },
   };
 }

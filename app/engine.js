@@ -29,6 +29,18 @@ export function diskCells(cell, k) {
   return h3.gridDisk(cell, k);
 }
 
+export function parentCell(cell, res) {
+  return h3.cellToParent(cell, res);
+}
+
+export function childrenOf(cell, res) {
+  return h3.cellToChildren(cell, res);
+}
+
+export function cellResolution(cell) {
+  return h3.getResolution(cell);
+}
+
 export function gridDistance(a, b) {
   try {
     return h3.gridDistance(a, b);
@@ -43,8 +55,8 @@ export function coverageUniverse(originCell) {
 
 export function cellsInBounds(bounds, res = CONFIG.h3Resolution) {
   const pad = 0.002;
-  const n = bounds.getNorth() + pad;
-  const s = bounds.getSouth() - pad;
+  const n = Math.min(bounds.getNorth() + pad, 85);
+  const s = Math.max(bounds.getSouth() - pad, -85);
   const e = bounds.getEast() + pad;
   const w = bounds.getWest() - pad;
   try {
