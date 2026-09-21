@@ -260,7 +260,10 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     updateBandLabels(band, labels, labelStats, extraLabel);
   }
 
-  function paintHexFog(store, areaStats, { forceRes9 = false } = {}) {
+  // Hexes are a pseudo layer: in halo mode only activated cells render (the
+  // glow around unlocked tiles). Locked/unlocked states live on the ward
+  // polygons + activity pins, never on hex fills.
+  function paintHexFog(store, areaStats, { forceRes9 = false, haloOnly = false } = {}) {
     const fogSource = map.getSource('hex-fog');
     const bounds = map.getBounds();
     const c = map.getCenter();
@@ -309,7 +312,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         else if (rec || neighborSet.has(cell)) statuses[i] = 'activated';
         // Whole-area activation: one unlocked hex lights its entire area,
         // revealing the area shape. Unlocked hexes stay individually clear.
-        else if (activeAreas && activeAreas.has(areas.areaOfHex(cell))) statuses[i] = 'activated';
+        // Skipped in halo mode — the ward polygon already shows the shape.
+        else if (!haloOnly && activeAreas && activeAreas.has(areas.areaOfHex(cell))) statuses[i] = 'activated';
         else statuses[i] = 'unclaimed';
       }
     } else {
@@ -320,26 +324,30 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         statuses[i] = unlocked.has(cell) ? 'unlocked' : touched.has(cell) ? 'activated' : 'unclaimed';
       }
     }
-    const sig = `${res}:${statuses.join(',')}`;
+    const sig = `${res}:${haloOnly ? 'halo' : 'full'}:${statuses.join(',')}`;
     const key = viewportKey();
     if (fogSource && (sig !== lastStatusSig || key !== lastFogKey)) {
-      fogSource.setData({
-        type: 'FeatureCollection',
-        features: cells.map((cell, i) => ({
+      const feats = [];
+      for (let i = 0; i < cells.length; i++) {
+        // Halo mode: only the activated pseudo-hexes render; everything
+        // else is carried by ward polygons + pins.
+        if (haloOnly && statuses[i] !== 'activated') continue;
+        feats.push({
           type: 'Feature',
-          id: cell,
-          properties: { h3: cell, status: statuses[i] },
-          geometry: { type: 'Polygon', coordinates: [boundaryFor(cell)] },
-        })),
-      });
+          id: cells[i],
+          properties: { h3: cells[i], status: statuses[i] },
+          geometry: { type: 'Polygon', coordinates: [boundaryFor(cells[i])] },
+        });
+      }
+      fogSource.setData({ type: 'FeatureCollection', features: feats });
       lastStatusSig = sig;
       lastFogKey = key;
     }
   }
 
   function paintSemanticBand(store, band) {
-    // Packs lazy-load on first zoom-out; the H3 ladder covers the wait and
-    // any region without semantic data.
+    // Packs lazy-load on first zoom-out; full hex fog covers the wait and
+    // any region without semantic data (the only place hexes still fill).
     if (!areas.levelReady(band)) {
       areas.ensureLevel(band).then((loaded) => {
         if (loaded && lastStoreRef) schedulePaint(lastStoreRef);
@@ -361,51 +369,13 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     let labelStats;
     let extraLabel = null;
     if (band === 'area') {
-      // Areas render as their member hexes (hexes as the drawing board),
-      // tinted by area status — never as raw ward polygons.
-      const bounds = map.getBounds();
-      const pad = 0.002;
-      const n = bounds.getNorth() + pad;
-      const s = bounds.getSouth() - pad;
-      const e = bounds.getEast() + pad;
-      const w = bounds.getWest() - pad;
-      const cells = [];
-      const statuses = [];
-      const seen = new Set();
-      for (const a of areas.getPack('areas') || []) {
-        const st = areaStats.get(a.id)?.status || 'unclaimed';
-        for (const m of areas.areaHexMembersOf(a.id)) {
-          if (seen.has(m.cell)) continue;
-          if (m.lat <= n && m.lat >= s && m.lng <= e && m.lng >= w) {
-            seen.add(m.cell);
-            cells.push(m.cell);
-            statuses.push(st);
-          }
-        }
-      }
+      // Areas render as filled ward polygons in their state color — never
+      // as hex fills. Hexes are purely a pseudo halo (street band only).
       const fogSource = map.getSource('hex-fog');
-      if (cells.length > CONFIG.maxRenderCells) {
-        if (fogSource && lastFogKey !== 'empty') {
-          fogSource.setData(EMPTY_COLLECTION);
-          lastFogKey = 'empty';
-          lastStatusSig = null;
-        }
-      } else {
-        const sig = `area-hex:${statuses.join(',')}`;
-        const key = viewportKey();
-        if (fogSource && (sig !== lastStatusSig || key !== lastFogKey)) {
-          fogSource.setData({
-            type: 'FeatureCollection',
-            features: cells.map((cell, i) => ({
-              type: 'Feature',
-              id: cell,
-              properties: { h3: cell, status: statuses[i] },
-              geometry: { type: 'Polygon', coordinates: [boundaryFor(cell)] },
-            })),
-          });
-          lastStatusSig = sig;
-          lastFogKey = key;
-        }
+      if (fogSource && lastFogKey !== 'empty') {
+        fogSource.setData(EMPTY_COLLECTION);
+        lastFogKey = 'empty';
+        lastStatusSig = null;
       }
       const areaItems = areas.getPack('areas');
       updateBandSources('area', areaItems, areaStats, areaItems, areaStats, null);
@@ -481,7 +451,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     const band = bandForZoom(map.getZoom());
     if (band === 'street') {
       const areaStats = areas.levelReady('area') ? areas.computeAreaStats(store) : null;
-      paintHexFog(store, areaStats, { forceRes9: true });
+      // Street base = ward polygon fills + activity pins; hexes render only
+      // as the activated pseudo-halo around unlocked tiles.
+      paintHexFog(store, areaStats, { forceRes9: true, haloOnly: true });
       // Area borders + labels overlay the street hexes for orientation.
       if (areaStats) {
         notePulseStats(areaStats);
