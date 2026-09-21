@@ -260,18 +260,6 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     updateBandLabels(band, labels, labelStats, extraLabel);
   }
 
-  function updateAreaEdges(areaStats) {
-    const src = map.getSource('area-edges');
-    if (!src) return;
-    const items = areas.getPack('areas') || [];
-    const parts = new Array(items.length);
-    for (let i = 0; i < items.length; i++) parts[i] = areaStats.get(items[i].id)?.status || 'u';
-    const sig = parts.join(',');
-    if (sig === semSig['area-edges']) return;
-    semSig['area-edges'] = sig;
-    src.setData(areas.areaEdgeFeatures(areaStats));
-  }
-
   function paintHexFog(store, areaStats, { forceRes9 = false } = {}) {
     const fogSource = map.getSource('hex-fog');
     const bounds = map.getBounds();
@@ -419,9 +407,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           lastFogKey = key;
         }
       }
-      updateAreaEdges(areaStats);
       const areaItems = areas.getPack('areas');
-      updateBandLabels('area', areaItems, areaStats, null);
+      updateBandSources('area', areaItems, areaStats, areaItems, areaStats, null);
       return;
     } else if (band === 'district') {
       items = areas.getPack('districts');
@@ -500,7 +487,6 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         notePulseStats(areaStats);
         const items = areas.getPack('areas');
         updateBandSources('area', items, areaStats, items, areaStats, null);
-        updateAreaEdges(areaStats);
       }
     } else {
       paintSemanticBand(store, band);
@@ -538,9 +524,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       map.addSource(`${band}-tiles`, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addSource(`${band}-labels`, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     }
-    // Area borders are dissolved H9 outer edges (hexes as the drawing board),
-    // not the raw ward polygons — always aligned with the fog.
-    map.addSource('area-edges', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    // Ward borders are the true OSM ward polygons (area-tiles); the hex fog
+    // underneath stays hexes. No dissolved hex-edge overlay anymore.
+      // (area-edges source retired: ward outlines now come from area-tiles.)
 
     // Polygon states: locked + activated share the dark-grey fill (the border
     // carries activation); unlocked goes hex-activated blue; mastered gold.
@@ -642,7 +628,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       map.addLayer({
         id: `${band}-border-glow`,
         type: 'line',
-        source: band === 'area' ? 'area-edges' : `${band}-tiles`,
+        source: `${band}-tiles`,
         minzoom: visMin,
         maxzoom: visMax,
         paint: {
@@ -656,7 +642,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       map.addLayer({
         id: `${band}-border`,
         type: 'line',
-        source: band === 'area' ? 'area-edges' : `${band}-tiles`,
+        source: `${band}-tiles`,
         minzoom: visMin,
         maxzoom: visMax,
         paint: {
@@ -672,7 +658,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       map.addLayer({
         id: `${band}-pulse`,
         type: 'line',
-        source: band === 'area' ? 'area-edges' : `${band}-tiles`,
+        source: `${band}-tiles`,
         minzoom: visMin,
         maxzoom: visMax,
         filter: ['in', ['get', 'status'], ['literal', ['activated', 'mastered']]],

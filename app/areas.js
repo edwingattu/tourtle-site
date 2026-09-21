@@ -1,5 +1,5 @@
 import { CONFIG } from './config.js';
-import { cellBoundary, cellCenter, cellsForPolygon, isUnlocked, neighbors } from './engine.js';
+import { cellCenter, cellsForPolygon, isUnlocked } from './engine.js';
 
 /**
  * Semantic tiles: Area > District > City > State > Country > Continent.
@@ -140,14 +140,12 @@ export function countryAt(lng, lat) {
 // authoritative area contents (complete, not limited to the city disk);
 // hexToArea maps every member hex back to its area.
 let areaHexMembers = new Map(); // areaId -> [{cell, lat, lng}]
-let areaEdgeSegs = new Map(); // areaId -> [[[lng,lat],[lng,lat]], ...]
 let hexRasterBuilt = false;
 
 export function buildAreaHexes() {
   if (hexRasterBuilt) return;
   hexRasterBuilt = true;
   areaHexMembers = new Map();
-  areaEdgeSegs = new Map();
   hexToArea = new Map();
   for (const a of packs.areas || []) {
     const set = new Set();
@@ -162,51 +160,7 @@ export function buildAreaHexes() {
       if (!hexToArea.has(cell)) hexToArea.set(cell, a.id);
     }
     areaHexMembers.set(a.id, members);
-    areaEdgeSegs.set(a.id, dissolveEdges(set));
   }
-}
-
-/** Outer edge segments of a hex set: edges whose across-neighbor is outside. */
-function dissolveEdges(set) {
-  const segs = [];
-  for (const cell of set) {
-    const ring = cellBoundary(cell);
-    const nbs = neighbors(cell);
-    const centers = nbs.map((n) => cellCenter(n));
-    for (let k = 0; k < 6; k++) {
-      const mx = (ring[k][0] + ring[k + 1][0]) / 2;
-      const my = (ring[k][1] + ring[k + 1][1]) / 2;
-      let bi = 0;
-      let bd = Infinity;
-      for (let i = 0; i < 6; i++) {
-        const dx = centers[i].lng - mx;
-        const dy = centers[i].lat - my;
-        const d = dx * dx + dy * dy;
-        if (d < bd) {
-          bd = d;
-          bi = i;
-        }
-      }
-      if (!set.has(nbs[bi])) segs.push([ring[k], ring[k + 1]]);
-    }
-  }
-  return segs;
-}
-
-/** LineString features of every area's outer edges, carrying live statuses. */
-export function areaEdgeFeatures(areaStats) {
-  const features = [];
-  for (const [id, segs] of areaEdgeSegs) {
-    const status = areaStats.get(id)?.status || 'unclaimed';
-    for (const s of segs) {
-      features.push({
-        type: 'Feature',
-        properties: { id, status },
-        geometry: { type: 'LineString', coordinates: s },
-      });
-    }
-  }
-  return { type: 'FeatureCollection', features };
 }
 
 /** Member list for one area (authoritative contents). */
