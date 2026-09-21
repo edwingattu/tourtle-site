@@ -590,7 +590,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         type: 'fill',
         source: `${band}-tiles`,
         minzoom: visMin,
-        maxzoom: vis.max,
+        // Area fills stay open-topped: street band is ward fills + halo.
+        maxzoom: openTop ? 22 : vis.max,
         paint: {
           'fill-color': TILE_FILL_COLOR,
           'fill-opacity': faded(TILE_FILL_OPACITY, vis.min, vis.max, openTop),
