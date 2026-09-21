@@ -222,15 +222,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     return parts.join(',');
   }
 
-  function updateBandSources(band, items, stats, labels, labelStats, extraLabel) {
-    const tileSource = map.getSource(`${band}-tiles`);
-    if (tileSource) {
-      const sig = `${band}:${statusSigOf(items, stats)}`;
-      if (sig !== semSig[band]) {
-        tileSource.setData(areas.levelFeatures(items, stats));
-        semSig[band] = sig;
-      }
-    }
+  function updateBandLabels(band, labels, labelStats, extraLabel) {
     const labelSource = map.getSource(`${band}-labels`);
     if (labelSource) {
       const lsig = `${band}-labels:${statusSigOf(labels, labelStats)}`;
@@ -241,6 +233,30 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         semSig[`${band}-labels`] = lsig;
       }
     }
+  }
+
+  function updateBandSources(band, items, stats, labels, labelStats, extraLabel) {
+    const tileSource = map.getSource(`${band}-tiles`);
+    if (tileSource) {
+      const sig = `${band}:${statusSigOf(items, stats)}`;
+      if (sig !== semSig[band]) {
+        tileSource.setData(areas.levelFeatures(items, stats));
+        semSig[band] = sig;
+      }
+    }
+    updateBandLabels(band, labels, labelStats, extraLabel);
+  }
+
+  function updateAreaEdges(areaStats) {
+    const src = map.getSource('area-edges');
+    if (!src) return;
+    const items = areas.getPack('areas') || [];
+    const parts = new Array(items.length);
+    for (let i = 0; i < items.length; i++) parts[i] = areaStats.get(items[i].id)?.status || 'u';
+    const sig = parts.join(',');
+    if (sig === semSig['area-edges']) return;
+    semSig['area-edges'] = sig;
+    src.setData(areas.areaEdgeFeatures(areaStats));
   }
 
   function paintHexFog(store, areaStats, { forceRes9 = false } = {}) {
@@ -342,10 +358,52 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     let labelStats;
     let extraLabel = null;
     if (band === 'area') {
-      items = areas.getPack('areas');
-      stats = areaStats;
-      labels = items;
-      labelStats = areaStats;
+      // Areas render as their member hexes (hexes as the drawing board),
+      // tinted by area status — never as raw ward polygons.
+      const bounds = map.getBounds();
+      const pad = 0.002;
+      const n = bounds.getNorth() + pad;
+      const s = bounds.getSouth() - pad;
+      const e = bounds.getEast() + pad;
+      const w = bounds.getWest() - pad;
+      const cells = [];
+      const statuses = [];
+      for (const a of areas.getPack('areas') || []) {
+        const st = areaStats.get(a.id)?.status || 'unclaimed';
+        for (const m of areas.areaHexMembersOf(a.id)) {
+          if (m.lat <= n && m.lat >= s && m.lng <= e && m.lng >= w) {
+            cells.push(m.cell);
+            statuses.push(st);
+          }
+        }
+      }
+      const fogSource = map.getSource('hex-fog');
+      if (cells.length > CONFIG.maxRenderCells) {
+        if (fogSource && lastFogKey !== 'empty') {
+          fogSource.setData(EMPTY_COLLECTION);
+          lastFogKey = 'empty';
+          lastStatusSig = null;
+        }
+      } else {
+        const sig = `area-hex:${statuses.join(',')}`;
+        const key = viewportKey();
+        if (fogSource && (sig !== lastStatusSig || key !== lastFogKey)) {
+          fogSource.setData({
+            type: 'FeatureCollection',
+            features: cells.map((cell, i) => ({
+              type: 'Feature',
+              properties: { h3: cell, status: statuses[i] },
+              geometry: { type: 'Polygon', coordinates: [boundaryFor(cell)] },
+            })),
+          });
+          lastStatusSig = sig;
+          lastFogKey = key;
+        }
+      }
+      updateAreaEdges(areaStats);
+      const areaItems = areas.getPack('areas');
+      updateBandLabels('area', areaItems, areaStats, null);
+      return;
     } else if (band === 'district') {
       items = areas.getPack('districts');
       stats = rollup.districts;
@@ -411,9 +469,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
 
   function doPaint(store) {
     lastStoreRef = store;
-    if (store.baseCell) {
-      if (ensureCityCache(store.baseCell)) areas.setCityHexes(cityList);
-    }
+    if (store.baseCell) ensureCityCache(store.baseCell);
+    if (areas.levelReady('area')) areas.buildAreaHexes();
     const band = bandForZoom(map.getZoom());
     if (band === 'street') {
       const areaStats = areas.levelReady('area') ? areas.computeAreaStats(store) : null;
@@ -422,6 +479,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       if (areaStats) {
         const items = areas.getPack('areas');
         updateBandSources('area', items, areaStats, items, areaStats, null);
+        updateAreaEdges(areaStats);
       }
     } else {
       paintSemanticBand(store, band);
@@ -459,6 +517,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       map.addSource(`${band}-tiles`, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addSource(`${band}-labels`, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     }
+    // Area borders are dissolved H9 outer edges (hexes as the drawing board),
+    // not the raw ward polygons — always aligned with the fog.
+    map.addSource('area-edges', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
     const TILE_FILL_COLOR = [
       'match',
@@ -502,7 +563,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       map.addLayer({
         id: `${band}-border-glow`,
         type: 'line',
-        source: `${band}-tiles`,
+        source: band === 'area' ? 'area-edges' : `${band}-tiles`,
         minzoom: vis.min,
         maxzoom: band === 'area' ? 22 : vis.max,
         paint: {
@@ -515,7 +576,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       map.addLayer({
         id: `${band}-border`,
         type: 'line',
-        source: `${band}-tiles`,
+        source: band === 'area' ? 'area-edges' : `${band}-tiles`,
         minzoom: vis.min,
         maxzoom: band === 'area' ? 22 : vis.max,
         paint: {
@@ -622,18 +683,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       window.clearTimeout(moveTimer);
       moveTimer = window.setTimeout(refreshViewport, 80);
     });
-    // Snap zoom: above the street band the camera rests only on level
-    // anchors (Continent 2.5 → Area 12.5). Free continuous zoom lives at
-    // street level. Bands switch at midpoints so camera and tiles agree.
-    map.on('zoomend', () => {
-      refreshViewport();
-      const z = map.getZoom();
-      if (z >= 12.5 - 0.06) return;
-      const anchors = [2.5, 4.5, 6.5, 8.5, 10.5, 12.5];
-      let best = anchors[0];
-      for (const a of anchors) if (Math.abs(a - z) < Math.abs(best - z)) best = a;
-      if (Math.abs(best - z) > 0.06) map.easeTo({ zoom: best, duration: 350 });
-    });
+    // Free zoom everywhere: tile appearance transitions at band edges via
+    // layer min/maxzoom. No snapping — the camera stays where the user puts it.
+    map.on('zoomend', refreshViewport);
     // Track gestures live: paints are rAF-coalesced and status-skipped, so
     // per-frame cost is one small polyfill (or a cache slice) at most.
     map.on('move', refreshViewport);

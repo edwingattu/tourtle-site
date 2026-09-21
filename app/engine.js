@@ -29,6 +29,14 @@ export function diskCells(cell, k) {
   return h3.gridDisk(cell, k);
 }
 
+export function cellsForPolygon(latLngLoop, res = CONFIG.h3Resolution) {
+  try {
+    return h3.polygonToCells([latLngLoop], res);
+  } catch {
+    return [];
+  }
+}
+
 export function parentCell(cell, res) {
   return h3.cellToParent(cell, res);
 }

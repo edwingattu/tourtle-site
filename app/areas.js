@@ -1,5 +1,5 @@
 import { CONFIG } from './config.js';
-import { isUnlocked } from './engine.js';
+import { cellBoundary, cellCenter, cellsForPolygon, isUnlocked, neighbors } from './engine.js';
 
 /**
  * Semantic tiles: Area > District > City > State > Country > Continent.
@@ -14,7 +14,6 @@ const packs = { meta: null, areas: null, districts: null, states: null, countrie
 const loading = {};
 
 let hexToArea = new Map();
-let areaMembers = new Map();
 
 function packUrl(name) {
   return new URL(`./data/${name}.json`, import.meta.url);
@@ -135,20 +134,84 @@ export function countryAt(lng, lat) {
   return findIn(packs.countries, lng, lat);
 }
 
-// ---- hex <-> area index (rebuilt when the city hex cache rebuilds) ----
-export function setCityHexes(cityHexes) {
+// ---- hex rasterization: hexes as the drawing board ----
+// Each area is rasterized once into member H9 cells (polygonToCells per ward
+// polygon) plus dissolved outer edge segments for borders. Members are the
+// authoritative area contents (complete, not limited to the city disk);
+// hexToArea maps every member hex back to its area.
+let areaHexMembers = new Map(); // areaId -> [{cell, lat, lng}]
+let areaEdgeSegs = new Map(); // areaId -> [[[lng,lat],[lng,lat]], ...]
+let hexRasterBuilt = false;
+
+export function buildAreaHexes() {
+  if (hexRasterBuilt) return;
+  hexRasterBuilt = true;
+  areaHexMembers = new Map();
+  areaEdgeSegs = new Map();
   hexToArea = new Map();
-  areaMembers = new Map();
-  const areas = packs.areas;
-  if (!areas || !cityHexes) return;
-  for (const h of cityHexes) {
-    const a = findIn(areas, h.lng, h.lat);
-    if (!a) continue;
-    hexToArea.set(h.cell, a.id);
-    let list = areaMembers.get(a.id);
-    if (!list) areaMembers.set(a.id, (list = []));
-    list.push(h.cell);
+  for (const a of packs.areas || []) {
+    const set = new Set();
+    for (const poly of a.polys) {
+      const outer = poly[0].map(([x, y]) => [y, x]); // [lng,lat] -> [lat,lng]
+      for (const cell of cellsForPolygon(outer)) set.add(cell);
+    }
+    const members = [];
+    for (const cell of set) {
+      const c = cellCenter(cell);
+      members.push({ cell, lat: c.lat, lng: c.lng });
+      if (!hexToArea.has(cell)) hexToArea.set(cell, a.id);
+    }
+    areaHexMembers.set(a.id, members);
+    areaEdgeSegs.set(a.id, dissolveEdges(set));
   }
+}
+
+/** Outer edge segments of a hex set: edges whose across-neighbor is outside. */
+function dissolveEdges(set) {
+  const segs = [];
+  for (const cell of set) {
+    const ring = cellBoundary(cell);
+    const nbs = neighbors(cell);
+    const centers = nbs.map((n) => cellCenter(n));
+    for (let k = 0; k < 6; k++) {
+      const mx = (ring[k][0] + ring[k + 1][0]) / 2;
+      const my = (ring[k][1] + ring[k + 1][1]) / 2;
+      let bi = 0;
+      let bd = Infinity;
+      for (let i = 0; i < 6; i++) {
+        const dx = centers[i].lng - mx;
+        const dy = centers[i].lat - my;
+        const d = dx * dx + dy * dy;
+        if (d < bd) {
+          bd = d;
+          bi = i;
+        }
+      }
+      if (!set.has(nbs[bi])) segs.push([ring[k], ring[k + 1]]);
+    }
+  }
+  return segs;
+}
+
+/** LineString features of every area's outer edges, carrying live statuses. */
+export function areaEdgeFeatures(areaStats) {
+  const features = [];
+  for (const [id, segs] of areaEdgeSegs) {
+    const status = areaStats.get(id)?.status || 'unclaimed';
+    for (const s of segs) {
+      features.push({
+        type: 'Feature',
+        properties: { id, status },
+        geometry: { type: 'LineString', coordinates: s },
+      });
+    }
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+/** Member list for one area (authoritative contents). */
+export function areaHexMembersOf(id) {
+  return areaHexMembers.get(id) || [];
 }
 
 export function areaOfHex(cell) {
@@ -166,11 +229,11 @@ function decideStatus(total, unlocked, active) {
 export function computeAreaStats(store) {
   const out = new Map();
   for (const a of packs.areas || []) {
-    const members = areaMembers.get(a.id) || [];
+    const members = areaHexMembers.get(a.id) || [];
     let unlocked = 0;
     let touched = 0;
-    for (const cell of members) {
-      const rec = store.tiles[cell];
+    for (const m of members) {
+      const rec = store.tiles[m.cell];
       if (!rec) continue;
       if (isUnlocked(rec)) unlocked += 1;
       else touched += 1;
@@ -273,9 +336,10 @@ export function levelFeatures(items, statsMap) {
       return {
         type: 'Feature',
         properties: { id: it.id, name: it.name, status, frac },
+        // Single polygons unwrap one level; MultiPolygons pass through.
         geometry: it.polys.length > 1
           ? { type: 'MultiPolygon', coordinates: it.polys }
-          : { type: 'Polygon', coordinates: it.polys },
+          : { type: 'Polygon', coordinates: it.polys[0] },
       };
     }),
   };
