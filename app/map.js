@@ -326,6 +326,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         type: 'FeatureCollection',
         features: cells.map((cell, i) => ({
           type: 'Feature',
+          id: cell,
           properties: { h3: cell, status: statuses[i] },
           geometry: { type: 'Polygon', coordinates: [boundaryFor(cell)] },
         })),
@@ -368,10 +369,13 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       const w = bounds.getWest() - pad;
       const cells = [];
       const statuses = [];
+      const seen = new Set();
       for (const a of areas.getPack('areas') || []) {
         const st = areaStats.get(a.id)?.status || 'unclaimed';
         for (const m of areas.areaHexMembersOf(a.id)) {
+          if (seen.has(m.cell)) continue;
           if (m.lat <= n && m.lat >= s && m.lng <= e && m.lng >= w) {
+            seen.add(m.cell);
             cells.push(m.cell);
             statuses.push(st);
           }
@@ -392,6 +396,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
             type: 'FeatureCollection',
             features: cells.map((cell, i) => ({
               type: 'Feature',
+              id: cell,
               properties: { h3: cell, status: statuses[i] },
               geometry: { type: 'Polygon', coordinates: [boundaryFor(cell)] },
             })),
@@ -542,7 +547,11 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
 
     // One fill + glow border + core border + labels per semantic level.
     // Bands mirror app/data/meta.json; area borders/labels extend into the
-    // street band as an orientation overlay.
+    // street band as an orientation overlay. Adjacent bands overlap by FADE
+    // on each side with a zoom-ramped opacity, so levels crossfade instead
+    // of popping. Hex features carry stable H3 ids so status changes and
+    // band swaps animate through paint transitions.
+    const FADE = 0.4;
     const BAND_VIS = {
       area: { min: 11.5, max: 12.5, text: [11.5, 10, 13, 14] },
       district: { min: 9.5, max: 11.5, text: [9.5, 10, 12, 15] },
@@ -551,24 +560,56 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       country: { min: 3.5, max: 5.5, text: [3.5, 9, 6, 14] },
       continent: { min: 0, max: 3.5, text: [0, 12, 4, 20] },
     };
+    // 0→1 ramp across the overlap below the band, 1→0 above (unless open).
+    // NOTE: zoom must feed a top-level interpolate (style-spec rule), so the
+    // status match sits inside the output stops — never multiplied outside.
+    function faded(matchExpr, lo, hi, topOpen) {
+      const stops = [];
+      if (lo > FADE) stops.push(lo - FADE, 0, lo, matchExpr);
+      else stops.push(0, matchExpr);
+      if (topOpen) stops.push(Math.max(hi, 22), matchExpr);
+      else stops.push(hi, matchExpr, hi + FADE, 0);
+      return ['interpolate', ['linear'], ['zoom'], ...stops];
+    }
+    function bandRamp(lo, hi, topOpen) {
+      const stops = [];
+      if (lo > FADE) stops.push(lo - FADE, 0, lo, 1);
+      else stops.push(0, 1);
+      if (topOpen) stops.push(Math.max(hi, 22), 1);
+      else stops.push(hi, 1, hi + FADE, 0);
+      return ['interpolate', ['linear'], ['zoom'], ...stops];
+    }
+    const GLOW_OPACITY = ['match', ['get', 'status'], 'unlocked', 0.55, 'activated', 0.35, 0];
+    const CORE_COLOR = ['match', ['get', 'status'], 'unlocked', '#eaf7ff', 'activated', '#7fd4ff', '#42546a'];
+    const CORE_WIDTH = ['match', ['get', 'status'], 'unlocked', 2.5, 'activated', 2, 1];
+    const LABEL_COLOR = ['match', ['get', 'status'], 'unclaimed', '#66788c', '#0e4a7a'];
     for (const [band, vis] of Object.entries(BAND_VIS)) {
+      const openTop = band === 'area';
+      const ramp = bandRamp(vis.min, vis.max, openTop);
+      const visMin = Math.max(0, vis.min - FADE);
+      const visMax = openTop ? 22 : vis.max + FADE;
       map.addLayer({
         id: `${band}-fill`,
         type: 'fill',
         source: `${band}-tiles`,
-        minzoom: vis.min,
+        minzoom: visMin,
         maxzoom: vis.max,
-        paint: { 'fill-color': TILE_FILL_COLOR, 'fill-opacity': TILE_FILL_OPACITY },
+        paint: {
+          'fill-color': TILE_FILL_COLOR,
+          'fill-opacity': faded(TILE_FILL_OPACITY, vis.min, vis.max, openTop),
+          'fill-opacity-transition': { duration: 300, delay: 0 },
+        },
       });
       map.addLayer({
         id: `${band}-border-glow`,
         type: 'line',
         source: band === 'area' ? 'area-edges' : `${band}-tiles`,
-        minzoom: vis.min,
-        maxzoom: band === 'area' ? 22 : vis.max,
+        minzoom: visMin,
+        maxzoom: visMax,
         paint: {
           'line-color': '#7fd4ff',
-          'line-opacity': ['match', ['get', 'status'], 'unlocked', 0.55, 'activated', 0.35, 0],
+          'line-opacity': faded(GLOW_OPACITY, vis.min, vis.max, openTop),
+          'line-opacity-transition': { duration: 300, delay: 0 },
           'line-width': 6,
           'line-blur': 2,
         },
@@ -577,19 +618,21 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         id: `${band}-border`,
         type: 'line',
         source: band === 'area' ? 'area-edges' : `${band}-tiles`,
-        minzoom: vis.min,
-        maxzoom: band === 'area' ? 22 : vis.max,
+        minzoom: visMin,
+        maxzoom: visMax,
         paint: {
-          'line-color': ['match', ['get', 'status'], 'unlocked', '#eaf7ff', 'activated', '#7fd4ff', '#42546a'],
-          'line-width': ['match', ['get', 'status'], 'unlocked', 2.5, 'activated', 2, 1],
+          'line-color': CORE_COLOR,
+          'line-opacity': ramp,
+          'line-opacity-transition': { duration: 300, delay: 0 },
+          'line-width': CORE_WIDTH,
         },
       });
       map.addLayer({
         id: `${band}-labels`,
         type: 'symbol',
         source: `${band}-labels`,
-        minzoom: vis.min,
-        maxzoom: band === 'area' ? 22 : vis.max,
+        minzoom: visMin,
+        maxzoom: visMax,
         layout: {
           'text-field': ['get', 'name'],
           'text-font': ['Noto Sans Regular'],
@@ -598,11 +641,19 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'text-ignore-placement': false,
         },
         paint: {
-          'text-color': ['match', ['get', 'status'], 'unclaimed', '#66788c', '#0e4a7a'],
+          'text-color': LABEL_COLOR,
+          'text-opacity': ramp,
+          'text-opacity-transition': { duration: 300, delay: 0 },
           'text-halo-color': 'rgba(255,255,255,0.9)',
           'text-halo-width': 2,
         },
       });
+    }
+    // Our tile labels replace the basemap's: hide every base symbol layer.
+    for (const l of map.getStyle().layers) {
+      if (l.type === 'symbol' && !/^(area|district|city|state|country|continent)-labels$/.test(l.id)) {
+        map.setLayoutProperty(l.id, 'visibility', 'none');
+      }
     }
 
     // Single seamless fill layer — no border/line layer by design.
@@ -632,6 +683,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           0.55,
           0.62,
         ],
+        'fill-opacity-transition': { duration: 300, delay: 0 },
       },
     });
 
