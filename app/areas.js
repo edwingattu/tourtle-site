@@ -218,8 +218,11 @@ export function areaOfHex(cell) {
   return hexToArea.get(cell) || null;
 }
 
-// ---- statuses ----
+// ---- statuses: locked / activated / unlocked (30%) / mastered (50%) ----
 function decideStatus(total, unlocked, active) {
+  if (total > 0 && unlocked >= Math.max(CONFIG.areaMasteredMin, Math.ceil(CONFIG.areaMasteredFraction * total))) {
+    return 'mastered';
+  }
   if (total > 0 && unlocked >= Math.max(CONFIG.areaUnlockMin, Math.ceil(CONFIG.areaUnlockFraction * total))) {
     return 'unlocked';
   }
@@ -249,12 +252,13 @@ export function computeAreaStats(store) {
 }
 
 function rollupChildren(childIds, childStats) {
+  // Mastered implies unlocked: mastered children count toward both bars.
   let unlocked = 0;
   let active = 0;
   for (const id of childIds) {
     const s = childStats.get(id);
     if (!s) continue;
-    if (s.status === 'unlocked') {
+    if (s.status === 'unlocked' || s.status === 'mastered') {
       unlocked += 1;
       active += 1;
     } else if (s.status === 'activated') {

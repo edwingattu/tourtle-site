@@ -157,8 +157,7 @@ button {
   background: #2e7cc2;
 }
 .swatch.cleared {
-  background: transparent;
-  border: 2px solid #2465a7;
+  background: #d9a13b;
 }
 
 .map-control svg {
