@@ -6,6 +6,8 @@ import {
   cellBoundary,
   cellCenter,
   cellsInBounds,
+  diskCells,
+  gridDistance,
   tileStatus,
   unlockedNeighborSet,
   isUnlocked,
@@ -40,6 +42,46 @@ export function createMap({ onHexSelect, onMove }) {
   const boundaryCache = new Map();
   const BOUNDARY_CACHE_MAX = 20000;
 
+  // ---- City-core grid cache ----
+  // One gridDisk(k=45) around the base cell ≈ 6.2k cells / GHMC core.
+  // Centers are precomputed once (cheap, synchronous); per-pan rendering
+  // filters this list by viewport bounds instead of re-running the H3
+  // polygon polyfill. Rebuilt only when the base moves >15 rings (~4.5km).
+  // Viewports outside the cached disk fall back to polygonToCells below.
+  let cityCenter = null;
+  let cityList = [];
+
+  function ensureCityCache(baseCell) {
+    if (cityCenter && gridDistance(baseCell, cityCenter) <= 15) return;
+    const ids = diskCells(baseCell, CONFIG.cityCacheK);
+    const list = new Array(ids.length);
+    for (let i = 0; i < ids.length; i++) {
+      const center = cellCenter(ids[i]);
+      list[i] = { cell: ids[i], lat: center.lat, lng: center.lng };
+    }
+    cityCenter = baseCell;
+    cityList = list;
+  }
+
+  function cityCovers(centerCell) {
+    if (!cityCenter || cityList.length === 0) return false;
+    return gridDistance(centerCell, cityCenter) <= CONFIG.cityCacheK - 15;
+  }
+
+  function sliceCityCells(bounds) {
+    const pad = 0.002;
+    const n = bounds.getNorth() + pad;
+    const s = bounds.getSouth() - pad;
+    const e = bounds.getEast() + pad;
+    const w = bounds.getWest() - pad;
+    const out = [];
+    for (let i = 0; i < cityList.length; i++) {
+      const c = cityList[i];
+      if (c.lat <= n && c.lat >= s && c.lng <= e && c.lng >= w) out.push(c.cell);
+    }
+    return out;
+  }
+
   function viewportKey() {
     const b = map.getBounds();
     const z = map.getZoom();
@@ -63,6 +105,8 @@ export function createMap({ onHexSelect, onMove }) {
     const fogSource = map.getSource('hex-fog');
     const pinsSource = map.getSource('activities');
 
+    if (store.baseCell) ensureCityCache(store.baseCell);
+
     if (map.getZoom() < CONFIG.minFogZoom) {
       if (fogSource && lastFogKey !== 'empty') {
         fogSource.setData(EMPTY_COLLECTION);
@@ -70,12 +114,16 @@ export function createMap({ onHexSelect, onMove }) {
         lastStatusSig = null;
       }
     } else {
+      const bounds = map.getBounds();
       const key = viewportKey();
       let cells;
-      if (key === cachedCellsKey) {
+      const c = map.getCenter();
+      if (cityCovers(cellAt(c.lat, c.lng))) {
+        cells = sliceCityCells(bounds);
+      } else if (key === cachedCellsKey) {
         cells = cachedCells;
       } else {
-        cells = cellsInBounds(map.getBounds());
+        cells = cellsInBounds(bounds);
         cachedCellsKey = key;
         cachedCells = cells;
       }

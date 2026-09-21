@@ -25,6 +25,18 @@ export function neighbors(cell) {
   return h3.gridDisk(cell, 1).filter((id) => id !== cell);
 }
 
+export function diskCells(cell, k) {
+  return h3.gridDisk(cell, k);
+}
+
+export function gridDistance(a, b) {
+  try {
+    return h3.gridDistance(a, b);
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
 export function coverageUniverse(originCell) {
   return h3.gridDisk(originCell, CONFIG.coverageRingK);
 }

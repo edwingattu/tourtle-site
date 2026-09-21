@@ -14,6 +14,9 @@ export const CONFIG = {
   defaultCenter: [78.4867, 17.4375],
   defaultZoom: 14.1,
   coverageRingK: 12,
+  // City-core precompute: gridDisk radius around the base cell cached once,
+  // viewport slices served from it. k=45 -> 6,211 cells ≈ 650 km² (GHMC core).
+  cityCacheK: 45,
   nominatimUrl: 'https://nominatim.openstreetmap.org/reverse',
   supabaseUrl: 'https://ftfcwxifezbzlfdbhxqy.supabase.co',
   supabaseAnonKey:
