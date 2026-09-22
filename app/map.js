@@ -40,12 +40,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
   let paintQueued = false;
   let pendingStore = null;
   let lastStoreRef = null;
-  // True while the painted band shows an activated or mastered tile — drives
-  // the border pulse interval below. Reset every paint, set by notePulseStats.
+  // True while the painted band shows a mastered tile — drives the gold
+  // border pulse interval below. Reset every paint, set by notePulseStats.
   let pulseNeeded = false;
-  // True while an activated hex is on screen — drives the hex fill/border
-  // pulse. Set by paintHexFog, reset every paint.
-  let hexPulseNeeded = false;
   let lastFogKey = null;
   let lastStatusSig = null;
   let lastActSig = null;
@@ -195,10 +192,12 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
 
   // ---- Semantic bands ----
   // Above the street band the map shows Area > District > City > State >
-  // Country > Continent tiles. Free continuous zoom lives only at street
-  // level (z >= 12.5); everything above snaps to anchors (see load block).
+  // Country > Continent tiles. Zoom is free everywhere; tile appearance
+  // transitions at band edges via layer min/maxzoom.
   function bandForZoom(zoom) {
-    if (zoom >= 12.5) return 'street';
+    // Street handoff at 12.88: below it polygons own every fill (hexes
+    // fully off); above it the H9 hex base takes over with ward overlays.
+    if (zoom >= 12.88) return 'street';
     if (zoom >= 11.5) return 'area';
     if (zoom >= 9.5) return 'district';
     if (zoom >= 7.5) return 'city';
@@ -224,7 +223,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
   function notePulseStats(stats) {
     if (!stats || pulseNeeded) return;
     for (const s of stats.values()) {
-      if (s?.status === 'activated' || s?.status === 'mastered') {
+      if (s?.status === 'mastered') {
         pulseNeeded = true;
         return;
       }
@@ -333,7 +332,6 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       lastStatusSig = sig;
       lastFogKey = key;
     }
-    if (!hexPulseNeeded) hexPulseNeeded = statuses.includes('activated');
   }
 
   function paintSemanticBand(store, band) {
@@ -439,7 +437,6 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
   function doPaint(store) {
     lastStoreRef = store;
     pulseNeeded = false;
-    hexPulseNeeded = false;
     if (store.baseCell) ensureCityCache(store.baseCell);
     if (areas.levelReady('area')) areas.buildAreaHexes();
     const band = bandForZoom(map.getZoom());
@@ -523,7 +520,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // band swaps animate through paint transitions.
     const FADE = 0.4;
     const BAND_VIS = {
-      area: { min: 11.5, max: 12.5, text: [11.5, 10, 13, 14] },
+      area: { min: 11.5, max: 12.88, text: [11.5, 10, 13, 14] },
       district: { min: 9.5, max: 11.5, text: [9.5, 10, 12, 15] },
       city: { min: 7.5, max: 9.5, text: [7.5, 11, 10, 16] },
       state: { min: 5.5, max: 7.5, text: [5.5, 10, 8, 15] },
@@ -549,15 +546,15 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       else stops.push(hi, 1, hi + FADE, 0);
       return ['interpolate', ['linear'], ['zoom'], ...stops];
     }
-    // Borders: locked darker grey; activated glowing blue; unlocked solid
-    // blue; mastered gold. Pulse (separate layer below) is reserved for
-    // activated (blue) and mastered (gold).
+    // Borders: locked darker grey; activated static white with a blue halo
+    // (glow layer); unlocked solid blue; mastered gold. Pulse (separate
+    // layer below) is mastered-only.
     const GLOW_OPACITY = ['match', ['get', 'status'], 'activated', 0.35, 'mastered', 0.35, 0];
     const CORE_COLOR = [
       'match',
       ['get', 'status'],
       'activated',
-      '#7fd4ff',
+      '#ffffff',
       'unlocked',
       '#2e7cc2',
       'mastered',
@@ -633,18 +630,19 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'line-width': CORE_WIDTH,
         },
       });
-      // Pulse overlay: activated breathes white, mastered breathes gold.
-      // Opacity is driven by the interval below (static number + transition),
-      // so the data expressions above are never touched.
+      // Pulse overlay: mastered breathes gold. Activated gets a static
+      // white border + blue halo instead (no pulse). Opacity is driven by
+      // the interval below (static number + transition), so the data
+      // expressions above are never touched.
       map.addLayer({
         id: `${band}-pulse`,
         type: 'line',
         source: `${band}-tiles`,
         minzoom: visMin,
         maxzoom: visMax,
-        filter: ['in', ['get', 'status'], ['literal', ['activated', 'mastered']]],
+        filter: ['==', ['get', 'status'], 'mastered'],
         paint: {
-          'line-color': ['match', ['get', 'status'], 'mastered', '#e8b93e', '#ffffff'],
+          'line-color': '#e8b93e',
           'line-opacity': 0,
           'line-opacity-transition': { duration: 700, delay: 0 },
           'line-width': 8,
@@ -680,66 +678,33 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       }
     }
 
-    // Border pulse: activated breathes white, mastered breathes gold. One
-    // shared breath via static opacity + transition — data expressions
-    // untouched. Idle (opacity 0) unless a live tile is painted. The hex
-    // glow/border layers join the same interval on a slower/faster phase.
+    // Gold border pulse, mastered tiles only. One shared breath via static
+    // opacity + transition — data expressions untouched. Idle (opacity 0)
+    // unless a mastered tile is painted.
     const PULSE_BANDS = ['area', 'district', 'city', 'state', 'country', 'continent'];
     let pulseHigh = false;
-    let hexTick = 0;
-    let hexFillHigh = false;
-    let hexBorderHigh = false;
-    const parkHexPulse = () => {
-      hexTick = 0;
-      hexFillHigh = false;
-      hexBorderHigh = false;
-      if (map.getLayer('hex-glow')) map.setPaintProperty('hex-glow', 'fill-opacity', 0);
-      if (map.getLayer('hex-borders')) map.setPaintProperty('hex-borders', 'line-opacity', 0);
-    };
     setInterval(() => {
-      if (!pulseNeeded && !hexPulseNeeded) {
+      if (!pulseNeeded) {
         if (pulseHigh) {
           pulseHigh = false;
           for (const band of PULSE_BANDS) {
             if (map.getLayer(`${band}-pulse`)) map.setPaintProperty(`${band}-pulse`, 'line-opacity', 0);
           }
         }
-        parkHexPulse();
         return;
       }
-      if (pulseNeeded) {
-        pulseHigh = !pulseHigh;
-        const v = pulseHigh ? 0.5 : 0.08;
-        for (const band of PULSE_BANDS) {
-          if (map.getLayer(`${band}-pulse`)) map.setPaintProperty(`${band}-pulse`, 'line-opacity', v);
-        }
+      pulseHigh = !pulseHigh;
+      const v = pulseHigh ? 0.5 : 0.08;
+      for (const band of PULSE_BANDS) {
+        if (map.getLayer(`${band}-pulse`)) map.setPaintProperty(`${band}-pulse`, 'line-opacity', v);
       }
-      if (hexPulseNeeded) {
-        hexTick += 1;
-        // Fill breathes very slowly (every other 700ms tick ≈ 2.8s cycle).
-        if (hexTick % 2 === 0) {
-          hexFillHigh = !hexFillHigh;
-          if (map.getLayer('hex-glow')) {
-            map.setPaintProperty('hex-glow', 'fill-opacity', hexFillHigh ? 0.5 : 0.12);
-          }
-        }
-        // White border pulses slightly faster (every tick ≈ 1.4s cycle).
-        hexBorderHigh = !hexBorderHigh;
-        if (map.getLayer('hex-borders')) {
-          map.setPaintProperty('hex-borders', 'line-opacity', hexBorderHigh ? 0.7 : 0.15);
-        }
-      } else {
-        parkHexPulse();
-      }
-    }, 700);
+    }, 750);
 
     // Hex base is one seamless fill (antialias off, no seams); the only
     // hex line layer is the activated-only white pulse border.
-    // Hex base layer: locked grey, activated blue, unlocked clear.
+    // Hex base layer: locked grey, activated static blue, unlocked clear.
     // Seamless and borderless; covers the whole viewport including
     // non-ward land. Polygons draw borders (and outward fills) above it.
-    // Activated hexes breathe via the hex-glow overlay + hex-borders below
-    // (the base activated arm stays a static floor).
     map.addLayer({
       id: 'hex-fills',
       type: 'fill',
@@ -761,36 +726,10 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'unlocked',
           0,
           'activated',
-          0.3,
+          0.55,
           0.62,
         ],
         'fill-opacity-transition': { duration: 300, delay: 0 },
-      },
-    });
-    // Slow-breathing blue fill over activated hexes (1400ms transitions).
-    map.addLayer({
-      id: 'hex-glow',
-      type: 'fill',
-      source: 'hex-fog',
-      filter: ['==', ['get', 'status'], 'activated'],
-      paint: {
-        'fill-antialias': false,
-        'fill-color': '#4a9de0',
-        'fill-opacity': 0,
-        'fill-opacity-transition': { duration: 1400, delay: 0 },
-      },
-    });
-    // White hex border, pulsing slightly faster than the fill (600ms).
-    map.addLayer({
-      id: 'hex-borders',
-      type: 'line',
-      source: 'hex-fog',
-      filter: ['==', ['get', 'status'], 'activated'],
-      paint: {
-        'line-color': '#ffffff',
-        'line-opacity': 0,
-        'line-opacity-transition': { duration: 600, delay: 0 },
-        'line-width': 1.5,
       },
     });
 
