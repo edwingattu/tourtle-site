@@ -132,6 +132,22 @@ button {
   flex-wrap: wrap;
 }
 
+/* Diagnostic zoom readout (V0 transient tuning). */
+.zoom-level {
+  position: absolute;
+  z-index: 3;
+  right: 24px;
+  top: 88px;
+  background: rgba(23, 54, 104, 0.85);
+  color: #fff;
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
 .legend-chip {
   background: rgba(248, 247, 242, 0.9);
   border-radius: 999px;
@@ -157,7 +173,7 @@ button {
   background: #2e7cc2;
 }
 .swatch.cleared {
-  background: #d9a13b;
+  background: #2e7cc2;
 }
 
 .map-control svg {

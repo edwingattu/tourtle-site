@@ -260,10 +260,10 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     updateBandLabels(band, labels, labelStats, extraLabel);
   }
 
-  // Hexes are a pseudo layer: in halo mode only activated cells render (the
-  // glow around unlocked tiles). Locked/unlocked states live on the ward
-  // polygons + activity pins, never on hex fills.
-  function paintHexFog(store, areaStats, { forceRes9 = false, haloOnly = false } = {}) {
+  // Hex base layer: full fog at street/area/district (and wherever no
+  // semantic tiles exist). Cleared at city band and outward, where
+  // polygons take over with their own fills.
+  function paintHexFog(store, areaStats, { forceRes9 = false } = {}) {
     const fogSource = map.getSource('hex-fog');
     const bounds = map.getBounds();
     const c = map.getCenter();
@@ -312,8 +312,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         else if (rec || neighborSet.has(cell)) statuses[i] = 'activated';
         // Whole-area activation: one unlocked hex lights its entire area,
         // revealing the area shape. Unlocked hexes stay individually clear.
-        // Skipped in halo mode — the ward polygon already shows the shape.
-        else if (!haloOnly && activeAreas && activeAreas.has(areas.areaOfHex(cell))) statuses[i] = 'activated';
+        else if (activeAreas && activeAreas.has(areas.areaOfHex(cell))) statuses[i] = 'activated';
         else statuses[i] = 'unclaimed';
       }
     } else {
@@ -324,22 +323,18 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         statuses[i] = unlocked.has(cell) ? 'unlocked' : touched.has(cell) ? 'activated' : 'unclaimed';
       }
     }
-    const sig = `${res}:${haloOnly ? 'halo' : 'full'}:${statuses.join(',')}`;
+    const sig = `${res}:${statuses.join(',')}`;
     const key = viewportKey();
     if (fogSource && (sig !== lastStatusSig || key !== lastFogKey)) {
-      const feats = [];
-      for (let i = 0; i < cells.length; i++) {
-        // Halo mode: only the activated pseudo-hexes render; everything
-        // else is carried by ward polygons + pins.
-        if (haloOnly && statuses[i] !== 'activated') continue;
-        feats.push({
+      fogSource.setData({
+        type: 'FeatureCollection',
+        features: cells.map((cell, i) => ({
           type: 'Feature',
-          id: cells[i],
-          properties: { h3: cells[i], status: statuses[i] },
-          geometry: { type: 'Polygon', coordinates: [boundaryFor(cells[i])] },
-        });
-      }
-      fogSource.setData({ type: 'FeatureCollection', features: feats });
+          id: cell,
+          properties: { h3: cell, status: statuses[i] },
+          geometry: { type: 'Polygon', coordinates: [boundaryFor(cell)] },
+        })),
+      });
       lastStatusSig = sig;
       lastFogKey = key;
     }
@@ -369,14 +364,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     let labelStats;
     let extraLabel = null;
     if (band === 'area') {
-      // Areas render as filled ward polygons in their state color — never
-      // as hex fills. Hexes are purely a pseudo halo (street band only).
-      const fogSource = map.getSource('hex-fog');
-      if (fogSource && lastFogKey !== 'empty') {
-        fogSource.setData(EMPTY_COLLECTION);
-        lastFogKey = 'empty';
-        lastStatusSig = null;
-      }
+      // Area band: full hex fog base (covers non-ward gaps); ward polygons
+      // draw borders + labels only — no fills this far in.
+      paintHexFog(store, areaStats, { forceRes9: true });
       const areaItems = areas.getPack('areas');
       updateBandSources('area', areaItems, areaStats, areaItems, areaStats, null);
       return;
@@ -434,7 +424,14 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       labelStats = rollup.continents;
     }
     updateBandSources(band, items, stats, labels, labelStats, extraLabel);
-    // The all-zoom hex layer must not double-render under semantic tiles.
+    if (band === 'district') {
+      // District and inward: full hex fog base via the resolution ladder;
+      // district polygons draw borders only — no fills this far in.
+      paintHexFog(store, null);
+      return;
+    }
+    // City band and outward: hexes clear, polygons take over with fills.
+    // The hex layer must not double-render under semantic tiles.
     const fogSource = map.getSource('hex-fog');
     if (fogSource && lastFogKey !== 'semantic') {
       fogSource.setData(EMPTY_COLLECTION);
@@ -451,9 +448,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     const band = bandForZoom(map.getZoom());
     if (band === 'street') {
       const areaStats = areas.levelReady('area') ? areas.computeAreaStats(store) : null;
-      // Street base = ward polygon fills + activity pins; hexes render only
-      // as the activated pseudo-halo around unlocked tiles.
-      paintHexFog(store, areaStats, { forceRes9: true, haloOnly: true });
+      // Street base = full hex fog; ward borders + labels overlay it.
+      paintHexFog(store, areaStats, { forceRes9: true });
       // Area borders + labels overlay the street hexes for orientation.
       if (areaStats) {
         notePulseStats(areaStats);
@@ -585,19 +581,24 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       const ramp = bandRamp(vis.min, vis.max, openTop);
       const visMin = Math.max(0, vis.min - FADE);
       const visMax = openTop ? 22 : vis.max + FADE;
-      map.addLayer({
-        id: `${band}-fill`,
-        type: 'fill',
-        source: `${band}-tiles`,
-        minzoom: visMin,
-        // Area fills stay open-topped: street band is ward fills + halo.
-        maxzoom: openTop ? 22 : vis.max,
-        paint: {
-          'fill-color': TILE_FILL_COLOR,
-          'fill-opacity': faded(TILE_FILL_OPACITY, vis.min, vis.max, openTop),
-          'fill-opacity-transition': { duration: 300, delay: 0 },
-        },
-      });
+      // Fills live at City band and outward only. Area + district polygons
+      // are borders-only this far in (hexes carry the fill), so those
+      // bands get no fill layer at all. The city band renders district
+      // geometries through the city-fill layer, with fills on.
+      if (band !== 'area' && band !== 'district') {
+        map.addLayer({
+          id: `${band}-fill`,
+          type: 'fill',
+          source: `${band}-tiles`,
+          minzoom: visMin,
+          maxzoom: vis.max,
+          paint: {
+            'fill-color': TILE_FILL_COLOR,
+            'fill-opacity': faded(TILE_FILL_OPACITY, vis.min, vis.max, openTop),
+            'fill-opacity-transition': { duration: 300, delay: 0 },
+          },
+        });
+      }
       map.addLayer({
         id: `${band}-border-glow`,
         type: 'line',
@@ -697,8 +698,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // Single seamless fill layer — no border/line layer by design.
     // Adjacent H3 cells share exact edges; antialiasing is off so no
     // hairline seams appear between tiles.
-    // Hex tiles stay seamless and borderless. Unlocked hexes glow golden —
-    // the same terminal color mastered polygons use.
+    // Hex base layer: locked grey, activated blue, unlocked clear.
+    // Seamless and borderless; covers the whole viewport including
+    // non-ward land. Polygons draw borders (and outward fills) above it.
     map.addLayer({
       id: 'hex-fills',
       type: 'fill',
@@ -709,7 +711,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'match',
           ['get', 'status'],
           'unlocked',
-          '#d9a13b',
+          'rgba(0,0,0,0)',
           'activated',
           '#2e7cc2',
           '#3e4a57',
@@ -718,7 +720,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'match',
           ['get', 'status'],
           'unlocked',
-          0.45,
+          0,
           'activated',
           0.55,
           0.62,
@@ -781,6 +783,14 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // Track gestures live: paints are rAF-coalesced and status-skipped, so
     // per-frame cost is one small polyfill (or a cache slice) at most.
     map.on('move', refreshViewport);
+    // Diagnostic zoom readout for transient tuning.
+    const zoomEl = document.getElementById('zoomLevel');
+    const refreshZoom = () => {
+      if (zoomEl) zoomEl.textContent = map.getZoom().toFixed(2);
+    };
+    map.on('move', refreshZoom);
+    map.on('zoomend', refreshZoom);
+    refreshZoom();
   });
 
   return {
