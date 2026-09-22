@@ -492,9 +492,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       'match',
       ['get', 'status'],
       'activated',
-      '#2e7cc2',
+      '#5eb0e5',
       'unlocked',
-      '#3f9e58',
+      '#5cc581',
       'mastered',
       '#d9a13b',
       '#3e4a57',
@@ -556,7 +556,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       'activated',
       '#ffffff',
       'unlocked',
-      '#3f9e58',
+      '#5cc581',
       'mastered',
       '#d9a13b',
       '#2b343f',
@@ -590,21 +590,27 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       // fills fade in normally; the fill layer cuts at the Street handoff
       // while edges/labels continue as the street overlay.
       const edgeMin = band === 'area' ? vis.min : visMin;
-      // Every band gets a fill layer: polygons are borders-only when
-      // unclaimed, blue when activated, green when unlocked, gold when
-      // mastered (areas only).
-      map.addLayer({
-        id: `${band}-fill`,
-        type: 'fill',
-        source: `${band}-tiles`,
-        minzoom: edgeMin,
-        maxzoom: vis.max,
-        paint: {
-          'fill-color': TILE_FILL_COLOR,
-          'fill-opacity': faded(TILE_FILL_OPACITY, vis.min, vis.max, openTop),
-          'fill-opacity-transition': { duration: 300, delay: 0 },
-        },
-      });
+      // Every band gets a fill layer except Country (borders-only — but
+      // State fills reach down into the Country band so it never goes
+      // bare). Polygons are borders-only when unclaimed, blue when
+      // activated, green when unlocked, gold when mastered (areas only).
+      if (band !== 'country') {
+        // State fills stay visible from the Country band upward.
+        const fillMin = band === 'state' ? 4.0 - FADE : edgeMin;
+        const fillLo = band === 'state' ? 4.0 : vis.min;
+        map.addLayer({
+          id: `${band}-fill`,
+          type: 'fill',
+          source: `${band}-tiles`,
+          minzoom: fillMin,
+          maxzoom: vis.max,
+          paint: {
+            'fill-color': TILE_FILL_COLOR,
+            'fill-opacity': faded(TILE_FILL_OPACITY, fillLo, vis.max, openTop),
+            'fill-opacity-transition': { duration: 300, delay: 0 },
+          },
+        });
+      }
       map.addLayer({
         id: `${band}-border-glow`,
         type: 'line',
@@ -719,7 +725,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'unlocked',
           'rgba(0,0,0,0)',
           'activated',
-          '#2e7cc2',
+          '#5eb0e5',
           '#3a4b5e',
         ],
         'fill-opacity': [

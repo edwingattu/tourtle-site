@@ -16,7 +16,7 @@ export const CONFIG = {
   weakAccuracyM: 85,
   smoothWindow: 5,
   simulateStepMeters: 95,
-  mapStyle: 'https://tiles.openfreemap.org/styles/liberty',
+  mapStyle: 'https://tiles.openfreemap.org/styles/positron',
   defaultCenter: [78.4867, 17.4375],
   defaultZoom: 14.51,
   coverageRingK: 12,

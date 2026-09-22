@@ -170,10 +170,10 @@ button {
   background: #3a4b5e;
 }
 .swatch.activated {
-  background: #2e7cc2;
+  background: #5eb0e5;
 }
 .swatch.cleared {
-  background: #3f9e58;
+  background: #5cc581;
 }
 
 .map-control svg {
