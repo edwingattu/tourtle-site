@@ -720,7 +720,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'rgba(0,0,0,0)',
           'activated',
           '#2e7cc2',
-          '#5b6b7d',
+          '#8c8c8c',
         ],
         'fill-opacity': [
           'match',
