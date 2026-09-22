@@ -18,7 +18,7 @@ export const CONFIG = {
   simulateStepMeters: 95,
   mapStyle: 'https://tiles.openfreemap.org/styles/liberty',
   defaultCenter: [78.4867, 17.4375],
-  defaultZoom: 14.3,
+  defaultZoom: 14.51,
   coverageRingK: 12,
   // City-core precompute: gridDisk radius around the base cell cached once,
   // viewport slices served from it. k=45 -> 6,211 cells ≈ 650 km² (GHMC core).

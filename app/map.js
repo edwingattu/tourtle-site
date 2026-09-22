@@ -503,11 +503,11 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       'match',
       ['get', 'status'],
       'activated',
-      0.55,
+      1,
       'unlocked',
-      0.55,
+      1,
       'mastered',
-      0.45,
+      1,
       0,
     ];
 
@@ -720,7 +720,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'rgba(0,0,0,0)',
           'activated',
           '#2e7cc2',
-          '#8c8c8c',
+          '#3a4b5e',
         ],
         'fill-opacity': [
           'match',
