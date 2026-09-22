@@ -516,25 +516,32 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // Bands mirror app/data/meta.json; area borders/labels extend into the
     // street band as an orientation overlay. Adjacent bands overlap by FADE
     // on each side with a zoom-ramped opacity, so levels crossfade instead
-    // of popping. Hex features carry stable H3 ids so status changes and
-    // band swaps animate through paint transitions.
+    // of popping. Continent + country fills/edges additionally persist
+    // inward to City (see BAND_VIS.persist) so land without deeper data
+    // never goes bare. Hex features carry stable H3 ids so status changes
+    // and band swaps animate through paint transitions.
     const FADE = 0.4;
+    // persist: outer bands keep fills + edges past their handoff, decaying
+    // slowly inward to City (7.9), so land without deeper data never goes
+    // bare. Labels never persist (they would stack and clutter).
     const BAND_VIS = {
       area: { min: 11.5, max: 12.88, text: [11.5, 10, 13, 14] },
       district: { min: 9.5, max: 11.5, text: [9.5, 10, 12, 15] },
       city: { min: 7.5, max: 9.5, text: [7.5, 11, 10, 16] },
       state: { min: 5.5, max: 7.5, text: [5.5, 10, 8, 15] },
-      country: { min: 3.5, max: 5.5, text: [3.5, 9, 6, 14] },
-      continent: { min: 0, max: 3.5, text: [0, 12, 4, 20] },
+      country: { min: 3.5, max: 5.5, text: [3.5, 9, 6, 14], persist: 7.9 },
+      continent: { min: 0, max: 3.5, text: [0, 12, 4, 20], persist: 7.9 },
     };
-    // 0→1 ramp across the overlap below the band, 1→0 above (unless open).
+    // 0→1 ramp across the overlap below the band, 1→0 above (unless open,
+    // or decaying slowly to persistTo for outer bands that linger inward).
     // NOTE: zoom must feed a top-level interpolate (style-spec rule), so the
     // status match sits inside the output stops — never multiplied outside.
-    function faded(matchExpr, lo, hi, topOpen) {
+    function faded(matchExpr, lo, hi, topOpen, persistTo = 0) {
       const stops = [];
       if (lo > FADE) stops.push(lo - FADE, 0, lo, matchExpr);
       else stops.push(0, matchExpr);
       if (topOpen) stops.push(Math.max(hi, 22), matchExpr);
+      else if (persistTo > hi) stops.push(hi, matchExpr, persistTo, 0);
       else stops.push(hi, matchExpr, hi + FADE, 0);
       return ['interpolate', ['linear'], ['zoom'], ...stops];
     }
@@ -543,6 +550,16 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       if (lo > FADE) stops.push(lo - FADE, 0, lo, 1);
       else stops.push(0, 1);
       if (topOpen) stops.push(Math.max(hi, 22), 1);
+      else stops.push(hi, 1, hi + FADE, 0);
+      return ['interpolate', ['linear'], ['zoom'], ...stops];
+    }
+    // Border ramp with the same slow inward decay as persisted fills.
+    function edgeRamp(lo, hi, topOpen, persistTo = 0) {
+      const stops = [];
+      if (lo > FADE) stops.push(lo - FADE, 0, lo, 1);
+      else stops.push(0, 1);
+      if (topOpen) stops.push(Math.max(hi, 22), 1);
+      else if (persistTo > hi) stops.push(hi, 1, persistTo, 0);
       else stops.push(hi, 1, hi + FADE, 0);
       return ['interpolate', ['linear'], ['zoom'], ...stops];
     }
@@ -582,9 +599,13 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     ];
     for (const [band, vis] of Object.entries(BAND_VIS)) {
       const openTop = band === 'area';
+      const persistTo = vis.persist || 0;
       const ramp = bandRamp(vis.min, vis.max, openTop);
+      const edge = edgeRamp(vis.min, vis.max, openTop, persistTo);
       const visMin = Math.max(0, vis.min - FADE);
       const visMax = openTop ? 22 : vis.max + FADE;
+      // Persisted outer bands keep edges visible to City; labels never persist.
+      const edgeMax = Math.max(visMax, persistTo);
       // Fills live everywhere polygons render except the district band,
       // which stays borders-only until the City handoff. (Street hexes
       // carry the fill below that.) The city band renders district
@@ -595,10 +616,10 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           type: 'fill',
           source: `${band}-tiles`,
           minzoom: visMin,
-          maxzoom: vis.max,
+          maxzoom: Math.max(vis.max, persistTo),
           paint: {
             'fill-color': TILE_FILL_COLOR,
-            'fill-opacity': faded(TILE_FILL_OPACITY, vis.min, vis.max, openTop),
+            'fill-opacity': faded(TILE_FILL_OPACITY, vis.min, vis.max, openTop, persistTo),
             'fill-opacity-transition': { duration: 300, delay: 0 },
           },
         });
@@ -608,10 +629,10 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         type: 'line',
         source: `${band}-tiles`,
         minzoom: visMin,
-        maxzoom: visMax,
+        maxzoom: edgeMax,
         paint: {
           'line-color': '#7fd4ff',
-          'line-opacity': faded(GLOW_OPACITY, vis.min, vis.max, openTop),
+          'line-opacity': faded(GLOW_OPACITY, vis.min, vis.max, openTop, persistTo),
           'line-opacity-transition': { duration: 300, delay: 0 },
           'line-width': 6,
           'line-blur': 2,
@@ -622,10 +643,10 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         type: 'line',
         source: `${band}-tiles`,
         minzoom: visMin,
-        maxzoom: visMax,
+        maxzoom: edgeMax,
         paint: {
           'line-color': CORE_COLOR,
-          'line-opacity': ramp,
+          'line-opacity': edge,
           'line-opacity-transition': { duration: 300, delay: 0 },
           'line-width': CORE_WIDTH,
         },
@@ -639,7 +660,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         type: 'line',
         source: `${band}-tiles`,
         minzoom: visMin,
-        maxzoom: visMax,
+        maxzoom: edgeMax,
         filter: ['==', ['get', 'status'], 'mastered'],
         paint: {
           'line-color': '#e8b93e',
