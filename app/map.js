@@ -580,6 +580,37 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       'rgba(10,20,35,0.65)',
       'rgba(255,255,255,0.9)',
     ];
+    // Hex base MUST be added before every polygon layer: insertion order
+    // is paint order, so this keeps hexes under all fills/borders/labels.
+    // Seamless fill, antialias off, no seams. Locked blue-tinted dark grey,
+    // activated light blue, unlocked clear.
+    map.addLayer({
+      id: 'hex-fills',
+      type: 'fill',
+      source: 'hex-fog',
+      paint: {
+        'fill-antialias': false,
+        'fill-color': [
+          'match',
+          ['get', 'status'],
+          'unlocked',
+          'rgba(0,0,0,0)',
+          'activated',
+          '#5eb0e5',
+          '#3a4b5e',
+        ],
+        'fill-opacity': [
+          'match',
+          ['get', 'status'],
+          'unlocked',
+          0,
+          'activated',
+          0.55,
+          0.62,
+        ],
+        'fill-opacity-transition': { duration: 300, delay: 0 },
+      },
+    });
     for (const [band, vis] of Object.entries(BAND_VIS)) {
       const openTop = band === 'area';
       const ramp = bandRamp(vis.min, vis.max, openTop);
@@ -707,39 +738,6 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         if (map.getLayer(`${band}-pulse`)) map.setPaintProperty(`${band}-pulse`, 'line-opacity', v);
       }
     }, 750);
-
-    // Hex base is one seamless fill (antialias off, no seams); the only
-    // hex line layer is the activated-only white pulse border.
-    // Hex base layer: lighter locked grey, activated static blue, unlocked
-    // clear. Seamless and borderless at every zoom; polygons draw borders
-    // (and state fills) above it.
-    map.addLayer({
-      id: 'hex-fills',
-      type: 'fill',
-      source: 'hex-fog',
-      paint: {
-        'fill-antialias': false,
-        'fill-color': [
-          'match',
-          ['get', 'status'],
-          'unlocked',
-          'rgba(0,0,0,0)',
-          'activated',
-          '#5eb0e5',
-          '#3a4b5e',
-        ],
-        'fill-opacity': [
-          'match',
-          ['get', 'status'],
-          'unlocked',
-          0,
-          'activated',
-          0.55,
-          0.62,
-        ],
-        'fill-opacity-transition': { duration: 300, delay: 0 },
-      },
-    });
 
     map.addLayer({
       id: 'activity-pins',
