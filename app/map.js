@@ -195,14 +195,14 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
   // Country > Continent tiles. Zoom is free everywhere; tile appearance
   // transitions at band edges via layer min/maxzoom.
   function bandForZoom(zoom) {
-    // Street handoff at 12.88: below it polygons own every fill (hexes
-    // fully off); above it the H9 hex base takes over with ward overlays.
-    if (zoom >= 12.88) return 'street';
-    if (zoom >= 11.5) return 'area';
+    // Hex base at every zoom; exactly one polygon band visible at a time.
+    // Street shows per-hex exploration; below it polygons carry the signal.
+    if (zoom >= 14.5) return 'street';
+    if (zoom >= 12.5) return 'area';
+    if (zoom >= 11.5) return 'city';
     if (zoom >= 9.5) return 'district';
-    if (zoom >= 7.5) return 'city';
-    if (zoom >= 5.5) return 'state';
-    if (zoom >= 3.5) return 'country';
+    if (zoom >= 7.0) return 'state';
+    if (zoom >= 4.0) return 'country';
     return 'continent';
   }
 
@@ -262,10 +262,11 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     updateBandLabels(band, labels, labelStats, extraLabel);
   }
 
-  // Hex base layer: street band only (plus no-data fallback regions).
-  // Activation is the 6-neighbor halo around unlocked tiles — never the
-  // whole area. Area band and up are polygons only.
-  function paintHexFog(store, { forceRes9 = false } = {}) {
+  // Hex base layer: painted at every zoom via the resolution ladder (H9
+  // forced at street). Below street, exploration stays hidden — every hex
+  // renders locked and polygons carry the signal. Street + no-data regions
+  // reveal per-hex statuses.
+  function paintHexFog(store, { forceRes9 = false, reveal = false } = {}) {
     const fogSource = map.getSource('hex-fog');
     const bounds = map.getBounds();
     const c = map.getCenter();
@@ -299,7 +300,10 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       return;
     }
     let statuses;
-    if (res === CONFIG.h3Resolution) {
+    if (!reveal) {
+      // Polygons carry the signal here: uniform locked base, no per-hex cost.
+      statuses = new Array(cells.length).fill('unclaimed');
+    } else if (res === CONFIG.h3Resolution) {
       const neighborSet = unlockedNeighborSet(store);
       statuses = new Array(cells.length);
       for (let i = 0; i < cells.length; i++) {
@@ -310,7 +314,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         else statuses[i] = 'unclaimed';
       }
     } else {
-      const { unlocked, touched } = coarseStatusMaps(store, res);
+      const { unlocked, touched } = reveal ? coarseStatusMaps(store, res) : { unlocked: new Set(), touched: new Set() };
       statuses = new Array(cells.length);
       for (let i = 0; i < cells.length; i++) {
         const cell = cells[i];
@@ -341,12 +345,12 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       areas.ensureLevel(band).then((loaded) => {
         if (loaded && lastStoreRef) schedulePaint(lastStoreRef);
       });
-      paintHexFog(store);
+      paintHexFog(store, { reveal: true });
       return;
     }
     const ctr = map.getCenter();
     if (!bandCovers(band, ctr.lng, ctr.lat)) {
-      paintHexFog(store);
+      paintHexFog(store, { reveal: true });
       return;
     }
     const areaStats = areas.computeAreaStats(store);
@@ -358,14 +362,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     let labelStats;
     let extraLabel = null;
     if (band === 'area') {
-      // Area band and up: polygons only, no hexes. The ward fill, borders,
-      // labels, and pulse carry every state.
-      const fogSource = map.getSource('hex-fog');
-      if (fogSource && lastFogKey !== 'empty') {
-        fogSource.setData(EMPTY_COLLECTION);
-        lastFogKey = 'empty';
-        lastStatusSig = null;
-      }
+      // Area band: uniform locked hex base (ladder) + ward polygons, whose
+      // fills/borders/labels carry every state. No per-hex exploration here.
+      paintHexFog(store);
       const areaItems = areas.getPack('areas');
       updateBandSources('area', areaItems, areaStats, areaItems, areaStats, null);
       return;
@@ -423,15 +422,10 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       labelStats = rollup.continents;
     }
     updateBandSources(band, items, stats, labels, labelStats, extraLabel);
-    // District and up: polygons only, hexes clear. (Area restores its fill
-    // layer below; district stays borders-only until the City handoff.)
-    // The hex layer must not double-render under semantic tiles.
-    const fogSource = map.getSource('hex-fog');
-    if (fogSource && lastFogKey !== 'semantic') {
-      fogSource.setData(EMPTY_COLLECTION);
-      lastFogKey = 'semantic';
-      lastStatusSig = null;
-    }
+    // Hex base under every polygon band (uniform locked — statuses reveal
+    // at street only). The ladder auto-degrades resolution to stay in
+    // budget, so the base never blanks.
+    paintHexFog(store);
   }
 
   function doPaint(store) {
@@ -442,9 +436,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     const band = bandForZoom(map.getZoom());
     if (band === 'street') {
       const areaStats = areas.levelReady('area') ? areas.computeAreaStats(store) : null;
-      // Street base = full hex fog (6-neighbor activation only); ward
+      // Street base = H9 hex fog with full per-hex exploration; ward
       // borders + labels overlay it.
-      paintHexFog(store, { forceRes9: true });
+      paintHexFog(store, { forceRes9: true, reveal: true });
       // Area borders + labels overlay the street hexes for orientation.
       if (areaStats) {
         notePulseStats(areaStats);
@@ -491,13 +485,16 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // underneath stays hexes. No dissolved hex-edge overlay anymore.
       // (area-edges source retired: ward outlines now come from area-tiles.)
 
-    // Polygon states: locked + activated share the dark-grey fill (the border
-    // carries activation); unlocked goes hex-activated blue; mastered gold.
+    // Polygon states: unclaimed draws borders only (hexes are the fill);
+    // activated fills hex-blue, unlocked fills green at the same opacity,
+    // mastered (areas only) fills gold.
     const TILE_FILL_COLOR = [
       'match',
       ['get', 'status'],
-      'unlocked',
+      'activated',
       '#2e7cc2',
+      'unlocked',
+      '#3f9e58',
       'mastered',
       '#d9a13b',
       '#3e4a57',
@@ -505,43 +502,39 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     const TILE_FILL_OPACITY = [
       'match',
       ['get', 'status'],
+      'activated',
+      0.55,
       'unlocked',
       0.55,
       'mastered',
       0.45,
-      0.62,
+      0,
     ];
 
     // One fill + glow border + core border + labels per semantic level.
     // Bands mirror app/data/meta.json; area borders/labels extend into the
     // street band as an orientation overlay. Adjacent bands overlap by FADE
     // on each side with a zoom-ramped opacity, so levels crossfade instead
-    // of popping. Continent + country fills/edges additionally persist
-    // inward to City (see BAND_VIS.persist) so land without deeper data
-    // never goes bare. Hex features carry stable H3 ids so status changes
-    // and band swaps animate through paint transitions.
+    // of popping. A uniform locked hex base renders under every band, so
+    // land without deeper data never goes bare. Hex features carry stable
+    // H3 ids so status changes animate through paint transitions.
     const FADE = 0.4;
-    // persist: outer bands keep fills + edges past their handoff, decaying
-    // slowly inward to City (7.9), so land without deeper data never goes
-    // bare. Labels never persist (they would stack and clutter).
     const BAND_VIS = {
-      area: { min: 11.5, max: 12.88, text: [11.5, 10, 13, 14] },
-      district: { min: 9.5, max: 11.5, text: [9.5, 10, 12, 15] },
-      city: { min: 7.5, max: 9.5, text: [7.5, 11, 10, 16] },
-      state: { min: 5.5, max: 7.5, text: [5.5, 10, 8, 15] },
-      country: { min: 3.5, max: 5.5, text: [3.5, 9, 6, 14], persist: 7.9 },
-      continent: { min: 0, max: 3.5, text: [0, 12, 4, 20], persist: 7.9 },
+      area: { min: 12.5, max: 14.49, text: [12.5, 10, 13, 14] },
+      district: { min: 9.5, max: 11.49, text: [9.5, 10, 12, 15] },
+      city: { min: 11.5, max: 12.49, text: [11.5, 11, 10, 16] },
+      state: { min: 7.0, max: 9.49, text: [7.0, 10, 8, 15] },
+      country: { min: 4.0, max: 6.99, text: [4.0, 9, 6, 14] },
+      continent: { min: 0, max: 3.99, text: [0, 12, 4, 20] },
     };
-    // 0→1 ramp across the overlap below the band, 1→0 above (unless open,
-    // or decaying slowly to persistTo for outer bands that linger inward).
+    // 0→1 ramp across the overlap below the band, 1→0 above (unless open).
     // NOTE: zoom must feed a top-level interpolate (style-spec rule), so the
     // status match sits inside the output stops — never multiplied outside.
-    function faded(matchExpr, lo, hi, topOpen, persistTo = 0) {
+    function faded(matchExpr, lo, hi, topOpen) {
       const stops = [];
       if (lo > FADE) stops.push(lo - FADE, 0, lo, matchExpr);
       else stops.push(0, matchExpr);
       if (topOpen) stops.push(Math.max(hi, 22), matchExpr);
-      else if (persistTo > hi) stops.push(hi, matchExpr, persistTo, 0);
       else stops.push(hi, matchExpr, hi + FADE, 0);
       return ['interpolate', ['linear'], ['zoom'], ...stops];
     }
@@ -550,16 +543,6 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       if (lo > FADE) stops.push(lo - FADE, 0, lo, 1);
       else stops.push(0, 1);
       if (topOpen) stops.push(Math.max(hi, 22), 1);
-      else stops.push(hi, 1, hi + FADE, 0);
-      return ['interpolate', ['linear'], ['zoom'], ...stops];
-    }
-    // Border ramp with the same slow inward decay as persisted fills.
-    function edgeRamp(lo, hi, topOpen, persistTo = 0) {
-      const stops = [];
-      if (lo > FADE) stops.push(lo - FADE, 0, lo, 1);
-      else stops.push(0, 1);
-      if (topOpen) stops.push(Math.max(hi, 22), 1);
-      else if (persistTo > hi) stops.push(hi, 1, persistTo, 0);
       else stops.push(hi, 1, hi + FADE, 0);
       return ['interpolate', ['linear'], ['zoom'], ...stops];
     }
@@ -573,7 +556,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       'activated',
       '#ffffff',
       'unlocked',
-      '#2e7cc2',
+      '#3f9e58',
       'mastered',
       '#d9a13b',
       '#2b343f',
@@ -599,40 +582,38 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     ];
     for (const [band, vis] of Object.entries(BAND_VIS)) {
       const openTop = band === 'area';
-      const persistTo = vis.persist || 0;
       const ramp = bandRamp(vis.min, vis.max, openTop);
-      const edge = edgeRamp(vis.min, vis.max, openTop, persistTo);
       const visMin = Math.max(0, vis.min - FADE);
       const visMax = openTop ? 22 : vis.max + FADE;
-      // Persisted outer bands keep edges visible to City; labels never persist.
-      const edgeMax = Math.max(visMax, persistTo);
-      // Fills live everywhere polygons render except the district band,
-      // which stays borders-only until the City handoff. (Street hexes
-      // carry the fill below that.) The city band renders district
-      // geometries through the city-fill layer, with fills on.
-      if (band !== 'district') {
-        map.addLayer({
-          id: `${band}-fill`,
-          type: 'fill',
-          source: `${band}-tiles`,
-          minzoom: visMin,
-          maxzoom: Math.max(vis.max, persistTo),
-          paint: {
-            'fill-color': TILE_FILL_COLOR,
-            'fill-opacity': faded(TILE_FILL_OPACITY, vis.min, vis.max, openTop, persistTo),
-            'fill-opacity-transition': { duration: 300, delay: 0 },
-          },
-        });
-      }
+      // Area edges/labels start exactly at the City→Area edge (12.5): no
+      // FADE lead-in, so Area borders never leak into the City band. Area
+      // fills fade in normally; the fill layer cuts at the Street handoff
+      // while edges/labels continue as the street overlay.
+      const edgeMin = band === 'area' ? vis.min : visMin;
+      // Every band gets a fill layer: polygons are borders-only when
+      // unclaimed, blue when activated, green when unlocked, gold when
+      // mastered (areas only).
+      map.addLayer({
+        id: `${band}-fill`,
+        type: 'fill',
+        source: `${band}-tiles`,
+        minzoom: edgeMin,
+        maxzoom: vis.max,
+        paint: {
+          'fill-color': TILE_FILL_COLOR,
+          'fill-opacity': faded(TILE_FILL_OPACITY, vis.min, vis.max, openTop),
+          'fill-opacity-transition': { duration: 300, delay: 0 },
+        },
+      });
       map.addLayer({
         id: `${band}-border-glow`,
         type: 'line',
         source: `${band}-tiles`,
-        minzoom: visMin,
-        maxzoom: edgeMax,
+        minzoom: edgeMin,
+        maxzoom: visMax,
         paint: {
           'line-color': '#7fd4ff',
-          'line-opacity': faded(GLOW_OPACITY, vis.min, vis.max, openTop, persistTo),
+          'line-opacity': faded(GLOW_OPACITY, vis.min, vis.max, openTop),
           'line-opacity-transition': { duration: 300, delay: 0 },
           'line-width': 6,
           'line-blur': 2,
@@ -642,11 +623,11 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         id: `${band}-border`,
         type: 'line',
         source: `${band}-tiles`,
-        minzoom: visMin,
-        maxzoom: edgeMax,
+        minzoom: edgeMin,
+        maxzoom: visMax,
         paint: {
           'line-color': CORE_COLOR,
-          'line-opacity': edge,
+          'line-opacity': ramp,
           'line-opacity-transition': { duration: 300, delay: 0 },
           'line-width': CORE_WIDTH,
         },
@@ -659,8 +640,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         id: `${band}-pulse`,
         type: 'line',
         source: `${band}-tiles`,
-        minzoom: visMin,
-        maxzoom: edgeMax,
+        minzoom: edgeMin,
+        maxzoom: visMax,
         filter: ['==', ['get', 'status'], 'mastered'],
         paint: {
           'line-color': '#e8b93e',
@@ -674,7 +655,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         id: `${band}-labels`,
         type: 'symbol',
         source: `${band}-labels`,
-        minzoom: visMin,
+        minzoom: edgeMin,
         maxzoom: visMax,
         layout: {
           'text-field': ['get', 'name'],
@@ -723,9 +704,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
 
     // Hex base is one seamless fill (antialias off, no seams); the only
     // hex line layer is the activated-only white pulse border.
-    // Hex base layer: locked grey, activated static blue, unlocked clear.
-    // Seamless and borderless; covers the whole viewport including
-    // non-ward land. Polygons draw borders (and outward fills) above it.
+    // Hex base layer: lighter locked grey, activated static blue, unlocked
+    // clear. Seamless and borderless at every zoom; polygons draw borders
+    // (and state fills) above it.
     map.addLayer({
       id: 'hex-fills',
       type: 'fill',
@@ -739,7 +720,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'rgba(0,0,0,0)',
           'activated',
           '#2e7cc2',
-          '#3e4a57',
+          '#4a5866',
         ],
         'fill-opacity': [
           'match',

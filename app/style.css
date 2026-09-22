@@ -167,13 +167,13 @@ button {
 }
 
 .swatch.fog {
-  background: #4b5d70;
+  background: #4a5866;
 }
 .swatch.activated {
   background: #2e7cc2;
 }
 .swatch.cleared {
-  background: #2e7cc2;
+  background: #3f9e58;
 }
 
 .map-control svg {

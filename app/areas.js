@@ -173,8 +173,13 @@ export function areaOfHex(cell) {
 }
 
 // ---- statuses: locked / activated / unlocked (30%) / mastered (50%) ----
-function decideStatus(total, unlocked, active) {
-  if (total > 0 && unlocked >= Math.max(CONFIG.areaMasteredMin, Math.ceil(CONFIG.areaMasteredFraction * total))) {
+// Mastered exists only for areas; higher levels top out at unlocked.
+function decideStatus(total, unlocked, active, canMaster) {
+  if (
+    canMaster &&
+    total > 0 &&
+    unlocked >= Math.max(CONFIG.areaMasteredMin, Math.ceil(CONFIG.areaMasteredFraction * total))
+  ) {
     return 'mastered';
   }
   if (total > 0 && unlocked >= Math.max(CONFIG.areaUnlockMin, Math.ceil(CONFIG.areaUnlockFraction * total))) {
@@ -199,7 +204,7 @@ export function computeAreaStats(store) {
       total: members.length,
       unlocked,
       touched,
-      status: decideStatus(members.length, unlocked, unlocked + touched),
+      status: decideStatus(members.length, unlocked, unlocked + touched, true),
     });
   }
   return out;
@@ -220,7 +225,8 @@ function rollupChildren(childIds, childStats) {
     }
   }
   const total = childIds.length;
-  return { total, unlocked, active, status: decideStatus(total, unlocked, active) };
+  // Rollup levels never master — unlocked is their terminal state.
+  return { total, unlocked, active, status: decideStatus(total, unlocked, active, false) };
 }
 
 /** Full hierarchy rollup. Districts/states without children stay unclaimed. */
