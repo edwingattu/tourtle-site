@@ -194,8 +194,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
   function bandForZoom(zoom) {
     // Hex base at every zoom; exactly one polygon band visible at a time.
     // Street shows per-hex exploration; below it polygons carry the signal.
-    // City lights before its districts going inward: city is the shallower
-    // band, districts resolve individually one step deeper.
+    // Order inward: Country → State → District → City → Area → Street.
     if (zoom >= 13.0) return 'street';
     if (zoom >= 11.0) return 'area';
     if (zoom >= 8.5) return 'city';
@@ -491,17 +490,18 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // land without deeper data never goes bare. Hex features carry stable
     // H3 ids so status changes animate through paint transitions.
     const FADE = 0.4;
-    // fade.in / fade.out are [zeroZoom, fullZoom] legs read zoom-out
-    // (high→low): fills are full mid-window and dissolve across both edges.
+    // fade.in / fade.out are [start, complete] exactly as specced. Points
+    // are sorted into zoom order when the ramp is built — no reordering,
+    // no typo-fixing. Layer caps are the outermost specced endpoints.
     const BAND_VIS = {
       area: { min: 11.0, max: 12.99, text: [11.0, 10, 13, 14],
               fade: { in: [13.25, 12.99], out: [11.15, 11.0] } },
       district: { min: 6.5, max: 8.49, text: [6.5, 10, 9, 15],
-              fade: { in: [8.6, 8.49], out: [6.5, 6.3] } },
+              fade: { in: [8.6, 8.49], out: [6.4, 6.5] } },
       city: { min: 8.5, max: 10.99, text: [8.5, 11, 10, 16],
-              fade: { in: [11.15, 10.99], out: [8.6, 8.49] } },
+              fade: { in: [11.15, 10.99], out: [8.6, 8.5] } },
       state: { min: 3.0, max: 6.49, text: [3.0, 10, 7, 15],
-              fade: { in: [6.6, 6.49], out: [3.2, 3.0] } },
+              fade: { in: [6.4, 6.49], out: [3.2, 3.0] } },
       country: { min: 0, max: 2.99, text: [0, 9, 4, 14],
               fade: { in: [3.2, 2.99], out: null } },
     };
@@ -599,23 +599,24 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       // The fill layer dissolves across the Street handoff (13.25→12.99)
       // while labels continue as the street overlay.
       const edgeMin = band === 'area' ? vis.min : visMin;
-      // Fills follow the specced fade legs: full mid-window, dissolving
-      // across both edges (country has no fade-out — full to the bottom).
-      // Polygons are borders-only when unclaimed, blue when activated,
-      // green when unlocked, gold when mastered (areas only).
-      const fadeStops = [];
-      if (vis.fade.out) fadeStops.push(vis.fade.out[1], 0, vis.fade.out[0], TILE_FILL_OPACITY);
-      else fadeStops.push(0, TILE_FILL_OPACITY);
-      fadeStops.push(vis.fade.in[1], TILE_FILL_OPACITY, vis.fade.in[0], 0);
+      // Fills follow the specced fade legs verbatim: each pair is
+      // [start, complete] as given, sorted into zoom order for the ramp.
+      // Layer caps are the outermost specced endpoints (0 at the bottom
+      // for country, which has no fade-out).
+      const fadePts = [];
+      if (vis.fade.out) fadePts.push([vis.fade.out[0], TILE_FILL_OPACITY], [vis.fade.out[1], 0]);
+      fadePts.push([vis.fade.in[0], 0], [vis.fade.in[1], TILE_FILL_OPACITY]);
+      fadePts.sort((a, b) => a[0] - b[0]);
+      const fadeNums = fadePts.map(([z]) => z);
       map.addLayer({
         id: `${band}-fill`,
         type: 'fill',
         source: `${band}-tiles`,
-        minzoom: vis.fade.out ? vis.fade.out[1] : 0,
-        maxzoom: vis.fade.in[0],
+        minzoom: vis.fade.out ? Math.min(...fadeNums) : 0,
+        maxzoom: Math.max(...fadeNums),
         paint: {
           'fill-color': TILE_FILL_COLOR,
-          'fill-opacity': ['interpolate', ['linear'], ['zoom'], ...fadeStops],
+          'fill-opacity': ['interpolate', ['linear'], ['zoom'], ...fadePts.flat()],
           'fill-opacity-transition': { duration: 300, delay: 0 },
         },
       });
