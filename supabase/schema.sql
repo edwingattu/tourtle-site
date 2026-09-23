@@ -57,6 +57,14 @@ drop policy if exists "owner all" on public.activities;
 create policy "owner all" on public.activities
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- Tables created via raw SQL get no role privileges by default (the
+-- dashboard builder adds these silently). Without them PostgREST refuses
+-- before RLS is even evaluated — the 403 "permission denied for table".
+grant all on public.tourtle_profiles to authenticated;
+grant all on public.tile_progress to authenticated;
+grant all on public.activities to authenticated;
+grant execute on function public.apply_tile_deltas(jsonb) to authenticated;
+
 -- ---- Delta-additive merge RPC ----
 -- The client pushes time *deltas* (never absolute totals), so progress earned
 -- on two devices adds up instead of overwriting. Deltas apply atomically per

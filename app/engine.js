@@ -279,7 +279,9 @@ export function createEngine() {
         if (!p) continue;
         p.dwell = Math.max(0, p.dwell - (amounts[cell]?.dwell || 0));
         p.boost = Math.max(0, p.boost - (amounts[cell]?.boost || 0));
-        if (p.dwell <= 0 && p.boost <= 0) delete store.pending[cell];
+        // Sub-ms dust (fractional leftovers of rounded sends) is dropped —
+        // otherwise zero-delta cells would ride every future flush.
+        if (p.dwell < 1 && p.boost < 1) delete store.pending[cell];
       }
       emit();
     },

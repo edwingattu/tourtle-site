@@ -66,10 +66,12 @@ export async function flush(engine) {
       const batch = cells.slice(0, CONFIG.syncBatchCells);
       const deltas = batch.map((cell) => {
         const rec = snap.store.tiles[cell] || {};
+        // Dwell ticks are fractional ms (performance.now diffs); the
+        // columns are bigint, so round — sub-ms precision is meaningless.
         return {
           h3_cell: cell,
-          dwell_ms: pending[cell].dwell || 0,
-          boost_ms: pending[cell].boost || 0,
+          dwell_ms: Math.round(pending[cell].dwell || 0),
+          boost_ms: Math.round(pending[cell].boost || 0),
           first_seen_at: rec.firstSeenAt ? new Date(rec.firstSeenAt).toISOString() : null,
           unlocked_at: rec.unlockedAt ? new Date(rec.unlockedAt).toISOString() : null,
         };
