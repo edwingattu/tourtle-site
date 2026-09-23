@@ -131,13 +131,12 @@ button {
   flex-wrap: wrap;
 }
 
-/* Diagnostic zoom readout (V0 transient tuning). Muted for now — element +
- * JS updates stay live so it can be called back by re-showing this rule. */
+/* Diagnostic zoom readout (V0 transient tuning). Top-left slot, freed by
+ * the retired legend. */
 .zoom-level {
-  display: none;
   position: absolute;
   z-index: 3;
-  right: 24px;
+  left: 24px;
   top: 88px;
   background: rgba(23, 54, 104, 0.85);
   color: #fff;
