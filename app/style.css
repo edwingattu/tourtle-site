@@ -103,7 +103,7 @@ button {
   position: absolute;
   z-index: 3;
   right: 24px;
-  bottom: calc(357px + env(safe-area-inset-bottom, 0px));
+  top: 140px;
   display: grid;
   gap: 9px;
 }
