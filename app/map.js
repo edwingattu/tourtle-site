@@ -420,10 +420,43 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       updateBandSources('area', areaItems, areaStats, areaItems, areaStats, null);
       return;
     } else if (band === 'district') {
-      items = areas.getPack('districts');
-      stats = rollup.districts;
-      labels = items;
-      labelStats = rollup.districts;
+      // If exploration has begun inside the city's districts, the city tile
+      // persists through this band and those small member districts don't
+      // render — the ward union replaces them one-for-one (all-or-nothing,
+      // since the union spatially overlaps every one of them).
+      const cityDistricts = areas.getCityDistrictIds();
+      const cityItem = areas.getCityItem();
+      let cityLive = false;
+      if (cityItem) {
+        const wardList = areas.getPack('areas') || [];
+        for (const a of wardList) {
+          if (cityDistricts.has(a.parent) && (areaStats.get(a.id)?.status || 'unclaimed') !== 'unclaimed') {
+            cityLive = true;
+            break;
+          }
+        }
+      }
+      if (cityLive && cityItem) {
+        const districts = areas.getPack('districts') || [];
+        const rest = districts.filter((d) => !cityDistricts.has(d.id));
+        items = [...rest, cityItem];
+        stats = new Map();
+        labelStats = new Map();
+        for (const d of rest) {
+          const st = rollup.districts.get(d.id) || { status: 'unclaimed', total: 0, unlocked: 0 };
+          stats.set(d.id, st);
+          labelStats.set(d.id, st);
+        }
+        const cst = rollup.city || { status: 'unclaimed', total: 0, unlocked: 0 };
+        stats.set(cityItem.id, cst);
+        labelStats.set(cityItem.id, cst);
+        labels = items;
+      } else {
+        items = areas.getPack('districts');
+        stats = rollup.districts;
+        labels = items;
+        labelStats = rollup.districts;
+      }
     } else if (band === 'city') {
       // City tile = the GHMC ward union: one polygon, one status, one
       // label. Outside ward coverage the hex base stands alone.

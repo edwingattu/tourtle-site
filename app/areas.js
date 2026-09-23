@@ -73,8 +73,17 @@ export function getCity() {
   return packs.meta?.city || null;
 }
 
-/** City tile item: the union of all ward polygons (MultiPolygon render —
- * no borders exist to expose internal seams). Built once, cached. */
+/** District ids that contain wards (i.e. overlap the city): dt-507/518/700/691.
+ * Built once from area parents. */
+let cityDistrictCache = null;
+export function getCityDistrictIds() {
+  if (cityDistrictCache) return cityDistrictCache;
+  cityDistrictCache = new Set();
+  for (const a of packs.areas || []) {
+    if (a.parent) cityDistrictCache.add(a.parent);
+  }
+  return cityDistrictCache;
+}
 let cityItemCache = null;
 export function getCityItem() {
   if (cityItemCache) return cityItemCache;
