@@ -220,7 +220,8 @@ function bindUi() {
     const zMin = parseFloat(zoomSlider.min);
     const zMax = parseFloat(zoomSlider.max);
     const syncZoomSlider = () => {
-      if (document.activeElement === zoomSlider) return;
+      // No focus guard: programmatic .value writes never refire `input`,
+      // so map-driven sync can't fight an active drag.
       const z = mapView.map.getZoom();
       zoomSlider.value = String(Math.min(zMax, Math.max(zMin, z)));
     };
