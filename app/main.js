@@ -7,6 +7,7 @@ import {
   remainingLabel,
 } from './engine.js';
 import { createMap } from './map.js';
+import { bootstrap, flush } from './sync.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -316,8 +317,20 @@ function tick() {
 await mapView.ready();
 engine.subscribe(() => mapView.paint(engine.getSnapshot().store));
 mapView.setUserLocation(CONFIG.defaultCenter[0], CONFIG.defaultCenter[1]);
+// Cloud bootstrap (silent-local on failure): seed local history, push it up,
+// pull canonical state — then repaint from merged totals.
+await bootstrap(engine);
 selectCell(mapView.cellUnderUser());
 bindUi();
 renderHud();
+mapView.paint(engine.getSnapshot().store);
 setInterval(tick, 1000);
+// Push the delta outbox on a cadence + whenever the app hides. Pulls stay
+// launch-only per V0 scope.
+setInterval(() => {
+  flush(engine);
+}, CONFIG.syncIntervalMs);
+window.addEventListener('pagehide', () => {
+  flush(engine);
+});
 toast('Hex fog is H3 resolution 9 — each tile is a real ~174m cell.');

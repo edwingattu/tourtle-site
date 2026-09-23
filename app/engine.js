@@ -117,6 +117,11 @@ function emptyStore() {
     lastActiveDate: null,
     outing: null,
     baseCell: cellAt(CONFIG.defaultCenter[1], CONFIG.defaultCenter[0]),
+    // Cloud outbox: per-cell deltas not yet pushed (cleared only after the
+    // server confirms). Survives reloads and crashes inside localStorage.
+    pending: {},
+    // ISO timestamp of the newest activity already pushed to the cloud.
+    activityCursor: null,
   };
 }
 
@@ -215,9 +220,17 @@ export function createEngine() {
     // Boosts never bank: only the seconds still needed toward unlock are
     // farmed from the boost, the rest is discarded. Post-unlock boosts are
     // inconsequential (room is zero or negative).
+    const boostBefore = rec.boostMs;
     if (boostMs > 0) {
       const room = CONFIG.dwellThresholdMs - rec.dwellMs - rec.boostMs;
       rec.boostMs += Math.max(0, Math.min(boostMs, room));
+    }
+    const appliedBoost = rec.boostMs - boostBefore;
+    // Record exactly what landed as an unsent delta for the cloud outbox.
+    if (dwellMs > 0 || appliedBoost > 0) {
+      const p = store.pending[cell] || (store.pending[cell] = { dwell: 0, boost: 0 });
+      p.dwell += dwellMs;
+      p.boost += appliedBoost;
     }
     const unlockedNow = maybeUnlock(rec);
     if (store.outing) {
@@ -251,6 +264,111 @@ export function createEngine() {
       });
       emit({ type: 'boost', cells, unlocked });
       return unlocked;
+    },
+    // ---- Cloud sync helpers (delta-additive merge) ----
+    // Pending deltas, keyed by cell. The caller pushes them, then marks
+    // pushed (or requeues on failure — never silently dropped).
+    getPending() {
+      return store.pending;
+    },
+    markPushed(cells, amounts = {}) {
+      // Subtract exactly what was confirmed, so dwell/boost that landed
+      // mid-upload stays pending instead of being silently dropped.
+      for (const cell of cells) {
+        const p = store.pending[cell];
+        if (!p) continue;
+        p.dwell = Math.max(0, p.dwell - (amounts[cell]?.dwell || 0));
+        p.boost = Math.max(0, p.boost - (amounts[cell]?.boost || 0));
+        if (p.dwell <= 0 && p.boost <= 0) delete store.pending[cell];
+      }
+      emit();
+    },
+    requeue(deltas) {
+      for (const [cell, d] of Object.entries(deltas)) {
+        const p = store.pending[cell] || (store.pending[cell] = { dwell: 0, boost: 0 });
+        p.dwell += d.dwell || 0;
+        p.boost += d.boost || 0;
+      }
+      emit();
+    },
+    // Adopt server tile totals: fresh server numbers + our still-unsent
+    // pending deltas (already reflected locally, so re-added, never lost).
+    // Timestamps keep the earliest non-null; unlocks recompute from totals.
+    applyServerTiles(rows) {
+      const next = {};
+      for (const r of rows) {
+        const p = store.pending[r.h3_cell] || { dwell: 0, boost: 0 };
+        const local = store.tiles[r.h3_cell];
+        const firstStamps = [local?.firstSeenAt, r.first_seen_at ? Date.parse(r.first_seen_at) : null].filter(
+          (v) => v != null,
+        );
+        const unlockStamps = [local?.unlockedAt, r.unlocked_at ? Date.parse(r.unlocked_at) : null].filter(
+          (v) => v != null,
+        );
+        next[r.h3_cell] = {
+          dwellMs: (r.dwell_ms || 0) + p.dwell,
+          boostMs: (r.boost_ms || 0) + p.boost,
+          firstSeenAt: firstStamps.length ? Math.min(...firstStamps) : Date.now(),
+          unlockedAt: unlockStamps.length ? Math.min(...unlockStamps) : null,
+        };
+        if (!next[r.h3_cell].unlockedAt && maybeUnlock(next[r.h3_cell])) {
+          /* crossed via another device's deltas — stamped now */
+        }
+      }
+      // Local-only cells (first-sync migration, or push not yet confirmed):
+      // keep totals; the pending outbox carries them up on next flush.
+      for (const [cell, rec] of Object.entries(store.tiles)) {
+        if (!next[cell]) next[cell] = rec;
+      }
+      store.tiles = next;
+      emit();
+    },
+    // Merge pulled activities by id (append-only upstream: no conflicts).
+    mergeActivities(rows) {
+      const seen = new Set(store.activities.map((a) => a.id));
+      let added = false;
+      for (const r of rows) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        store.activities.push({
+          id: r.id,
+          title: r.title,
+          category: r.category,
+          captureType: r.capture_type,
+          lat: r.lat,
+          lng: r.lng,
+          cell: r.h3_cell,
+          createdAt: Date.parse(r.created_at),
+          tiles: r.tiles || [],
+        });
+        added = true;
+      }
+      if (added) {
+        store.activities.sort((a, b) => a.createdAt - b.createdAt);
+        emit();
+      }
+    },
+    setActivityCursor(iso) {
+      store.activityCursor = iso;
+      emit();
+    },
+    // Adopt the cloud profile row (last-write-wins), never regressing streak.
+    adoptProfile(prow) {
+      if (!prow) return;
+      if ((prow.streak_days || 0) > store.streakDays) store.streakDays = prow.streak_days;
+      if (prow.last_active_date && (store.lastActiveDate || '') < prow.last_active_date) {
+        store.lastActiveDate = prow.last_active_date;
+      }
+      if (prow.base_cell) store.baseCell = prow.base_cell;
+      // A live outing on another device resumes here (mid-outing sync).
+      if (prow.current_outing) {
+        store.outing = {
+          startedAt: prow.current_outing.startedAt,
+          lastTouchAt: prow.current_outing.lastTouchAt,
+          touched: [...(prow.current_outing.touched || [])],
+        };
+      }
+      emit();
     },
     logActivity({ title, category, captureType, lat, lng, cell }) {
       const activity = {

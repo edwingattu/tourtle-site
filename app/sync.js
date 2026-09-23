@@ -1,0 +1,144 @@
+import { supabase } from './auth.js';
+import { CONFIG } from './config.js';
+
+// Cloud sync: offline-first, delta-additive merge.
+// - localStorage stays the fast local cache; Supabase is source of truth.
+// - Pushes carry time DELTAS (never absolute totals) via the
+//   apply_tile_deltas RPC, so two devices add up instead of overwriting.
+// - Pulls happen on launch; pushes flush every syncIntervalMs + on hide.
+// - Every failure is silent-local: the outbox survives in localStorage and
+//   retries on the next flush. The map never blocks on the network.
+
+async function currentUserId() {
+  try {
+    const { data } = await supabase.auth.getUser();
+    return data.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Launch pull: tiles + activities + profile merged into the local store. */
+export async function pullAll(engine) {
+  const uid = await currentUserId();
+  if (!uid) return false;
+  const [tiles, acts, prof] = await Promise.all([
+    supabase.from('tile_progress').select('*').eq('user_id', uid),
+    supabase.from('activities').select('*').eq('user_id', uid).order('created_at'),
+    supabase.from('tourtle_profiles').select('*').eq('user_id', uid).limit(1),
+  ]);
+  if (tiles.error || acts.error || prof.error) return false;
+  engine.applyServerTiles(tiles.data || []);
+  engine.mergeActivities(acts.data || []);
+  if (prof.data?.[0]) engine.adoptProfile(prof.data[0]);
+  return true;
+}
+
+let flushing = false;
+
+/** Push everything pending: tile deltas, new activities, profile + outing. */
+export async function flush(engine) {
+  if (flushing) return false;
+  const uid = await currentUserId();
+  if (!uid) return false;
+  flushing = true;
+  try {
+    const snap = engine.getSnapshot();
+
+    // 1. Tile deltas (batched; leftovers stay pending for next flush).
+    const pending = engine.getPending();
+    const cells = Object.keys(pending);
+    if (cells.length) {
+      const batch = cells.slice(0, CONFIG.syncBatchCells);
+      const deltas = batch.map((cell) => {
+        const rec = snap.store.tiles[cell] || {};
+        return {
+          h3_cell: cell,
+          dwell_ms: pending[cell].dwell || 0,
+          boost_ms: pending[cell].boost || 0,
+          first_seen_at: rec.firstSeenAt ? new Date(rec.firstSeenAt).toISOString() : null,
+          unlocked_at: rec.unlockedAt ? new Date(rec.unlockedAt).toISOString() : null,
+        };
+      });
+      const { error } = await supabase.rpc('apply_tile_deltas', { deltas });
+      if (error) throw error;
+      const sent = {};
+      batch.forEach((cell, i) => {
+        sent[cell] = { dwell: deltas[i].dwell_ms, boost: deltas[i].boost_ms };
+      });
+      engine.markPushed(batch, sent);
+    }
+
+    // 2. Activities since cursor (upsert by id: retries are idempotent).
+    const cursor = snap.store.activityCursor;
+    const fresh = snap.store.activities.filter(
+      (a) => !cursor || new Date(a.createdAt).toISOString() > cursor,
+    );
+    if (fresh.length) {
+      const rows = fresh.map((a) => ({
+        id: a.id,
+        user_id: uid,
+        title: a.title,
+        category: a.category,
+        capture_type: a.captureType,
+        lat: a.lat,
+        lng: a.lng,
+        h3_cell: a.cell,
+        tiles: a.tiles || [],
+        created_at: new Date(a.createdAt).toISOString(),
+      }));
+      const { error } = await supabase.from('activities').upsert(rows, { onConflict: 'id' });
+      if (error) throw error;
+      const newest = Math.max(...fresh.map((a) => a.createdAt));
+      engine.setActivityCursor(new Date(newest).toISOString());
+    }
+
+    // 3. Profile: base, streak, and the live outing (mid-outing sync rides
+    // here — every flush carries the current touched list).
+    const outing = snap.store.outing;
+    const { error: profileError } = await supabase.from('tourtle_profiles').upsert(
+      {
+        user_id: uid,
+        base_cell: snap.store.baseCell,
+        streak_days: snap.store.streakDays,
+        last_active_date: snap.store.lastActiveDate,
+        current_outing: outing
+          ? { startedAt: outing.startedAt, lastTouchAt: outing.lastTouchAt, touched: outing.touched }
+          : null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' },
+    );
+    if (profileError) throw profileError;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    flushing = false;
+  }
+}
+
+// First-sync migration: pre-cloud local totals become one additive seed.
+// Overwrites (not adds to) any pending entries, since those touches are
+// already inside the totals. Runs once, then cloudLinked persists.
+function seedMigration(engine) {
+  const snap = engine.getSnapshot();
+  if (snap.store.cloudLinked) return;
+  for (const [cell, rec] of Object.entries(snap.store.tiles)) {
+    snap.store.pending[cell] = { dwell: rec.dwellMs || 0, boost: rec.boostMs || 0 };
+  }
+  snap.store.cloudLinked = true;
+  engine.markPushed([]); // persist seed + flag
+}
+
+/** Launch sequence: seed local history, push it up, then pull canonical state. */
+export async function bootstrap(engine) {
+  try {
+    seedMigration(engine);
+    await flush(engine);
+    await pullAll(engine);
+    return true;
+  } catch {
+    return false;
+  }
+}

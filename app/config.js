@@ -16,6 +16,9 @@ export const CONFIG = {
   weakAccuracyM: 85,
   smoothWindow: 5,
   simulateStepMeters: 95,
+  // Cloud sync: push outbox this often + on page hide; pulls on launch.
+  syncIntervalMs: 30_000,
+  syncBatchCells: 500,
   mapStyle: 'https://tiles.openfreemap.org/styles/positron',
   defaultCenter: [78.4867, 17.4375],
   defaultZoom: 14.51,
