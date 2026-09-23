@@ -607,14 +607,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // 0→1 ramp across the overlap below the band, 1→0 above (unless open).
     // NOTE: zoom must feed a top-level interpolate (style-spec rule), so the
     // status match sits inside the output stops — never multiplied outside.
-    function faded(matchExpr, lo, hi, topOpen) {
-      const stops = [];
-      if (lo > FADE) stops.push(lo - FADE, 0, lo, matchExpr);
-      else stops.push(0, matchExpr);
-      if (topOpen) stops.push(Math.max(hi, 22), matchExpr);
-      else stops.push(hi, matchExpr, hi + FADE, 0);
-      return ['interpolate', ['linear'], ['zoom'], ...stops];
-    }
+    // (Labels only now; polygon fills are hard on/off via min/maxzoom.)
     function bandRamp(lo, hi, topOpen) {
       const stops = [];
       if (lo > FADE) stops.push(lo - FADE, 0, lo, 1);
@@ -691,7 +684,6 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     for (const [band, vis] of Object.entries(BAND_VIS)) {
       const openTop = band === 'area';
       const ramp = bandRamp(vis.min, vis.max, openTop);
-      const visMin = Math.max(0, vis.min - FADE);
       // Labels are strictly windowed (no FADE lead-in/out): each band's
       // names enter exactly at its lower edge and leave at its upper edge
       // (area labels continue as the street overlay). Quick 0.15-zoom
@@ -702,57 +694,45 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         ? ramp
         : ['interpolate', ['linear'], ['zoom'],
            vis.min, 0, vis.min + 0.15, 1, vis.max - 0.15, 1, vis.max, 0];
-      // Fill opacity per band: fade legs at both window edges, full base
-      // between. 'B' = set base fill (status match). District's 6.40 was
-      // read as 6.60 (symmetric 0.1 in-leg with the stated 6.50 zero).
-      const FILL_STOPS = {
-        area: [[11.0, 0], [11.15, 'B'], [12.99, 'B'], [13.25, 0]],
-        city: [[8.5, 0], [8.6, 'B'], [10.99, 'B'], [11.15, 0]],
-        district: [[6.5, 0], [6.6, 'B'], [8.49, 'B'], [8.6, 0]],
-        state: [[3.0, 0], [3.2, 'B'], [6.4, 'B'], [6.5, 0]],
+      // Polygon fills are hard on/off at band edges — no zoom fades.
+      // Window per band (on → off); continent fill disabled entirely.
+      const FILL_WINDOW = {
+        area: [11.0, 12.7],
+        city: [8.5, 11.0],
+        district: [6.5, 8.5],
+        state: [3.0, 6.5],
+        country: [0, 3.0],
+        continent: null,
       };
       const LIVE_FILL = ['match', ['get', 'status'], 'activated', 0.7, 'unlocked', 0.7, 0];
       if (band === 'country') {
-        // Continent-band country fills: live countries only (activated
-        // blue, unlocked green — unclaimed stays bare). Full at/below the
-        // 2.99 handoff, dissolving by 3.20.
+        // Live countries only (activated blue, unlocked green — unclaimed
+        // stays bare). Hard off at 3.0.
         map.addLayer({
           id: 'country-fill',
           type: 'fill',
           source: 'country-tiles',
           minzoom: 0,
-          maxzoom: 3.2,
+          maxzoom: 3.0,
           paint: {
             'fill-color': TILE_FILL_COLOR,
-            'fill-opacity': ['interpolate', ['linear'], ['zoom'], 2.99, LIVE_FILL, 3.2, 0],
+            'fill-opacity': LIVE_FILL,
             'fill-opacity-transition': { duration: 300, delay: 0 },
           },
         });
       } else if (band === 'continent') {
-        map.addLayer({
-          id: 'continent-fill',
-          type: 'fill',
-          source: 'continent-tiles',
-          minzoom: visMin,
-          maxzoom: vis.max,
-          paint: {
-            'fill-color': TILE_FILL_COLOR,
-            'fill-opacity': faded(TILE_FILL_OPACITY, vis.min, vis.max, openTop),
-            'fill-opacity-transition': { duration: 300, delay: 0 },
-          },
-        });
+        // Continent fill disabled entirely — no layer. (Labels still render.)
       } else {
-        const stops = [];
-        for (const [z, o] of FILL_STOPS[band]) stops.push(z, o === 'B' ? TILE_FILL_OPACITY : o);
+        const [fillMin, fillMax] = FILL_WINDOW[band];
         map.addLayer({
           id: `${band}-fill`,
           type: 'fill',
           source: `${band}-tiles`,
-          minzoom: FILL_STOPS[band][0][0],
-          maxzoom: FILL_STOPS[band][FILL_STOPS[band].length - 1][0],
+          minzoom: fillMin,
+          maxzoom: fillMax,
           paint: {
             'fill-color': TILE_FILL_COLOR,
-            'fill-opacity': ['interpolate', ['linear'], ['zoom'], ...stops],
+            'fill-opacity': TILE_FILL_OPACITY,
             'fill-opacity-transition': { duration: 300, delay: 0 },
           },
         });
