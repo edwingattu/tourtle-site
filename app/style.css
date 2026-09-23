@@ -131,8 +131,10 @@ button {
   flex-wrap: wrap;
 }
 
-/* Diagnostic zoom readout (V0 transient tuning). */
+/* Diagnostic zoom readout (V0 transient tuning). Muted for now — element +
+ * JS updates stay live so it can be called back by re-showing this rule. */
 .zoom-level {
+  display: none;
   position: absolute;
   z-index: 3;
   right: 24px;
@@ -145,6 +147,15 @@ button {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
+}
+
+/* Live Fog Clearing pill, promoted from the card onto the map (zoom-counter slot). */
+.map-tracking {
+  position: absolute;
+  z-index: 3;
+  right: 24px;
+  top: 88px;
+  box-shadow: 0 4px 16px rgba(21, 73, 60, 0.12);
 }
 
 .legend-chip {
