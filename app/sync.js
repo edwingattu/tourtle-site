@@ -11,9 +11,14 @@ import { CONFIG } from './config.js';
 
 async function currentUserId() {
   try {
-    const { data } = await supabase.auth.getUser();
+    const { data, error } = await supabase.auth.getUser();
+    if (error) {
+      console.warn('[sync] getUser failed:', error.message);
+      return null;
+    }
     return data.user?.id ?? null;
-  } catch {
+  } catch (err) {
+    console.warn('[sync] getUser threw:', err?.message || err);
     return null;
   }
 }
@@ -21,16 +26,25 @@ async function currentUserId() {
 /** Launch pull: tiles + activities + profile merged into the local store. */
 export async function pullAll(engine) {
   const uid = await currentUserId();
-  if (!uid) return false;
+  if (!uid) {
+    console.warn('[sync] pull skipped: no user');
+    return false;
+  }
   const [tiles, acts, prof] = await Promise.all([
     supabase.from('tile_progress').select('*').eq('user_id', uid),
     supabase.from('activities').select('*').eq('user_id', uid).order('created_at'),
     supabase.from('tourtle_profiles').select('*').eq('user_id', uid).limit(1),
   ]);
-  if (tiles.error || acts.error || prof.error) return false;
+  if (tiles.error || acts.error || prof.error) {
+    console.warn('[sync] pull failed:', tiles.error?.message, acts.error?.message, prof.error?.message);
+    return false;
+  }
   engine.applyServerTiles(tiles.data || []);
   engine.mergeActivities(acts.data || []);
   if (prof.data?.[0]) engine.adoptProfile(prof.data[0]);
+  console.log(
+    `[sync] pull ok: ${tiles.data?.length || 0} tiles, ${acts.data?.length || 0} activities, profile ${prof.data?.[0] ? 'found' : 'none'}`,
+  );
   return true;
 }
 
@@ -110,8 +124,12 @@ export async function flush(engine) {
       { onConflict: 'user_id' },
     );
     if (profileError) throw profileError;
+    console.log(
+      `[sync] flush ok: ${cells.length} pending cells, ${fresh.length} activities, profile upserted`,
+    );
     return true;
-  } catch {
+  } catch (err) {
+    console.warn('[sync] flush failed:', err?.message || err);
     return false;
   } finally {
     flushing = false;
@@ -134,11 +152,28 @@ function seedMigration(engine) {
 /** Launch sequence: seed local history, push it up, then pull canonical state. */
 export async function bootstrap(engine) {
   try {
+    console.log('[sync] bootstrap start');
     seedMigration(engine);
     await flush(engine);
     await pullAll(engine);
+    console.log('[sync] bootstrap done');
     return true;
-  } catch {
+  } catch (err) {
+    console.warn('[sync] bootstrap failed:', err?.message || err);
     return false;
+  }
+}
+
+// Dev hook: window.__tourtleSync.flush() / .pullAll() / .engine from console.
+export function exposeDebug(target, engine) {
+  try {
+    target.__tourtleSync = {
+      flush: () => flush(engine),
+      pullAll: () => pullAll(engine),
+      pending: () => engine.getPending(),
+      store: () => engine.getSnapshot().store,
+    };
+  } catch {
+    /* non-browser */
   }
 }

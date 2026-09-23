@@ -7,7 +7,7 @@ import {
   remainingLabel,
 } from './engine.js';
 import { createMap } from './map.js';
-import { bootstrap, flush } from './sync.js';
+import { bootstrap, exposeDebug, flush } from './sync.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -320,6 +320,7 @@ mapView.setUserLocation(CONFIG.defaultCenter[0], CONFIG.defaultCenter[1]);
 // Cloud bootstrap (silent-local on failure): seed local history, push it up,
 // pull canonical state — then repaint from merged totals.
 await bootstrap(engine);
+exposeDebug(window, engine);
 selectCell(mapView.cellUnderUser());
 bindUi();
 renderHud();
