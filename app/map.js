@@ -425,28 +425,17 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       labels = items;
       labelStats = rollup.districts;
     } else if (band === 'city') {
-      // City tile = member districts sharing one aggregated status; other
-      // districts keep their own. City label replaces member district labels.
-      const city = areas.getCity();
-      const districts = areas.getPack('districts');
-      items = districts;
+      // City tile = the GHMC ward union: one polygon, one status, one
+      // label. Outside ward coverage the hex base stands alone.
+      const cityItem = areas.getCityItem();
+      items = cityItem ? [cityItem] : [];
       stats = new Map();
-      for (const d of districts || []) {
-        stats.set(
-          d.id,
-          city && city.members.includes(d.id)
-            ? rollup.city
-            : rollup.districts.get(d.id) || { status: 'unclaimed', total: 0, unlocked: 0 },
-        );
-      }
-      labels = (districts || []).filter((d) => !(city && city.members.includes(d.id)));
-      labelStats = rollup.districts;
-      if (city) {
-        extraLabel = {
-          type: 'Feature',
-          properties: { name: city.name, status: rollup.city?.status || 'unclaimed' },
-          geometry: { type: 'Point', coordinates: city.c },
-        };
+      labels = items;
+      labelStats = new Map();
+      if (cityItem) {
+        const st = rollup.city || { status: 'unclaimed', total: 0, unlocked: 0 };
+        stats.set(cityItem.id, st);
+        labelStats.set(cityItem.id, st);
       }
     } else if (band === 'state') {
       items = areas.getPack('states');

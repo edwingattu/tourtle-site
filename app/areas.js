@@ -73,6 +73,21 @@ export function getCity() {
   return packs.meta?.city || null;
 }
 
+/** City tile item: the union of all ward polygons (MultiPolygon render —
+ * no borders exist to expose internal seams). Built once, cached. */
+let cityItemCache = null;
+export function getCityItem() {
+  if (cityItemCache) return cityItemCache;
+  const city = getCity();
+  if (!city || !packs.areas) return null;
+  const polys = [];
+  for (const a of packs.areas) {
+    for (const p of a.polys || []) polys.push(p);
+  }
+  cityItemCache = { id: city.id, name: city.name, c: city.c, polys };
+  return cityItemCache;
+}
+
 // ---- geometry helpers (lng/lat, even-odd across rings = holes safe) ----
 function bboxOf(polys) {
   let x0 = 1e9;
@@ -281,8 +296,29 @@ export function computeRollup(store, areaStats) {
     continentStats.set(cont, rollupChildren(ids, countryStats));
   }
 
+  // City = the GHMC ward union (the lived city), rolled up straight from
+  // areas — never from districts. Mastered areas count as unlocked here,
+  // same as every rollup; cities never master.
+  let cityUnlocked = 0;
+  let cityActive = 0;
+  let cityTotal = 0;
+  for (const s of areaStats.values()) {
+    cityTotal += 1;
+    if (s.status === 'unlocked' || s.status === 'mastered') {
+      cityUnlocked += 1;
+      cityActive += 1;
+    } else if (s.status === 'activated') {
+      cityActive += 1;
+    }
+  }
   const cityStats = city
-    ? { ...rollupChildren(city.members || [], districtStats), name: city.name }
+    ? {
+        total: cityTotal,
+        unlocked: cityUnlocked,
+        active: cityActive,
+        status: decideStatus(cityTotal, cityUnlocked, cityActive, false),
+        name: city.name,
+      }
     : null;
 
   return { areas: areaStats, districts: districtStats, states: stateStats,
