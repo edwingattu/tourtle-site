@@ -121,15 +121,7 @@ button {
   place-items: center;
 }
 
-.map-legend {
-  position: absolute;
-  z-index: 3;
-  left: 24px;
-  top: 88px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
+.map-control svg {
 
 /* Diagnostic zoom readout (V0 transient tuning). Muted for now — element +
  * JS updates stay live so it can be called back by re-showing this rule. */
@@ -158,33 +150,7 @@ button {
   box-shadow: 0 4px 16px rgba(21, 73, 60, 0.12);
 }
 
-.legend-chip {
-  background: rgba(248, 247, 242, 0.9);
-  border-radius: 999px;
-  padding: 5px 9px;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--navy);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-}
-
-.swatch.fog {
-  background: #3a4b5e;
-}
-.swatch.activated {
-  background: #5eb0e5;
-}
-.swatch.cleared {
-  background: #5cc581;
-}
+.map-control svg {
 
 .map-control svg {
   display: block;
