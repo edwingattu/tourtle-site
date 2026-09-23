@@ -195,8 +195,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // Hex base at every zoom; exactly one polygon band visible at a time.
     // Street (per-hex exploration) hands off to polygons at 13.25.
     if (zoom >= 13.25) return 'street';
-    if (zoom >= 11.0) return 'area';
-    if (zoom >= 8.5) return 'city';
+    if (zoom >= 10.5) return 'area';
+    if (zoom >= 9.3) return 'city';
     if (zoom >= 6.5) return 'district';
     if (zoom >= 3.0) return 'state';
     if (zoom >= 2.0) return 'country';
@@ -325,9 +325,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     }
   }
 
-  // Street exploration fading through the Area band: only live hexes are
-  // emitted (activated neighbors + touched tiles, never unlocked-clear);
-  // the layer's zoom ramp dissolves them by 11.01. Ladder resolution via
+  // Explored hexes echoed above the area fills: only live hexes are
+  // emitted (activated neighbors + touched tiles, never unlocked-clear).
+  // The layer hard-switches on at 12.70. Ladder resolution via
   // resolveCells (auto-degrades to budget), exact statuses at H9 and
   // coarse rollup below.
   let revealKey = null;
@@ -413,7 +413,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     if (band === 'area') {
       // Area band: uniform locked hex base (ladder) + ward polygons, whose
       // fills/labels carry every state. Street exploration echoes through
-      // the hex-reveal overlay, dissolving by 11.01.
+      // the hex-reveal overlay (hard on at 12.70).
       paintHexFog(store);
       paintHexReveal(store);
       const areaItems = areas.getPack('areas');
@@ -550,8 +550,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
 
   map.on('load', () => {
     map.addSource('hex-fog', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-    // Overlay for street-level exploration fading out through the Area
-    // band (full at 13.25, gone by 11.01). Fed only in the Area band.
+    // Overlay for street-level exploration above the area fills
+    // (hard on at 12.70). Fed only in the Area band.
     map.addSource('hex-reveal', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addSource('activities', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     for (const band of ['area', 'district', 'city', 'state', 'country', 'continent']) {
@@ -597,9 +597,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // H3 ids so status changes animate through paint transitions.
     const FADE = 0.4;
     const BAND_VIS = {
-      area: { min: 11.0, max: 13.25, text: [11.0, 10, 13, 14] },
-      district: { min: 6.5, max: 8.5, text: [6.5, 10, 12, 15] },
-      city: { min: 8.5, max: 11.0, text: [8.5, 11, 10, 16] },
+      area: { min: 10.5, max: 13.25, text: [11.0, 10, 13, 14] },
+      district: { min: 6.5, max: 9.3, text: [6.5, 10, 12, 15] },
+      city: { min: 9.3, max: 10.5, text: [8.5, 11, 10, 16] },
       state: { min: 3.0, max: 6.5, text: [3.0, 10, 8, 15] },
       country: { min: 2.0, max: 3.0, text: [2.0, 9, 6, 14] },
       continent: { min: 0, max: 2.0, text: [0, 12, 4, 20] },
@@ -665,19 +665,18 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         'fill-opacity-transition': { duration: 300, delay: 0 },
       },
     });
-    // Reveal overlay: street exploration echoing into the Area band. Its
-    // opacity is a pure zoom ramp (full 13.25 → zero 11.01), so the street
-    // hexes blend away instead of popping. Polygons paint above this.
+    // Reveal overlay: explored street hexes, hard on at 12.70 (no fade).
+    // Polygons paint above this.
     map.addLayer({
       id: 'hex-reveal',
       type: 'fill',
       source: 'hex-reveal',
-      minzoom: 11.0,
+      minzoom: 12.7,
       maxzoom: 22,
       paint: {
         'fill-antialias': false,
         'fill-color': '#5eb0e5',
-        'fill-opacity': ['interpolate', ['linear'], ['zoom'], 11.01, 0, 13.25, 0.55],
+        'fill-opacity': 0.55,
         'fill-opacity-transition': { duration: 300, delay: 0 },
       },
     });
@@ -697,9 +696,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       // Polygon fills are hard on/off at band edges — no zoom fades.
       // Window per band (on → off); continent fill disabled entirely.
       const FILL_WINDOW = {
-        area: [11.0, 12.7],
-        city: [8.5, 11.0],
-        district: [6.5, 8.5],
+        area: [10.5, 12.7],
+        city: [9.3, 10.5],
+        district: [6.5, 9.3],
         state: [3.0, 6.5],
         country: [0, 3.0],
         continent: null,
