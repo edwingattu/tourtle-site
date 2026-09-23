@@ -193,8 +193,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
   // transitions at band edges via layer min/maxzoom.
   function bandForZoom(zoom) {
     // Hex base at every zoom; exactly one polygon band visible at a time.
-    // Street (per-hex exploration) hands off to polygons at 13.25.
-    if (zoom >= 13.25) return 'street';
+    // Street (per-hex exploration) takes over at 12.70.
+    if (zoom >= 12.7) return 'street';
     if (zoom >= 10.5) return 'area';
     if (zoom >= 9.3) return 'city';
     if (zoom >= 6.5) return 'district';
@@ -325,67 +325,6 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     }
   }
 
-  // Explored hexes echoed above the area fills: only live hexes are
-  // emitted (activated neighbors + touched tiles, never unlocked-clear).
-  // The layer hard-switches on at 12.70. Ladder resolution via
-  // resolveCells (auto-degrades to budget), exact statuses at H9 and
-  // coarse rollup below.
-  let revealKey = null;
-  function paintHexReveal(store) {
-    const src = map.getSource('hex-reveal');
-    if (!src) return;
-    const bounds = map.getBounds();
-    const c = map.getCenter();
-    const { res, cells } = resolveCells(bounds, cellAt(c.lat, c.lng), map.getZoom());
-    if (cells.length > CONFIG.maxRenderCells) {
-      if (revealKey !== 'empty') {
-        src.setData(EMPTY_COLLECTION);
-        revealKey = 'empty';
-      }
-      return;
-    }
-    const feats = [];
-    if (res === CONFIG.h3Resolution) {
-      const neighborSet = unlockedNeighborSet(store);
-      for (const cell of cells) {
-        const rec = store.tiles[cell];
-        if ((!rec || !isUnlocked(rec)) && (rec || neighborSet.has(cell))) {
-          feats.push({
-            type: 'Feature',
-            id: cell,
-            properties: { h3: cell },
-            geometry: { type: 'Polygon', coordinates: [boundaryFor(cell)] },
-          });
-        }
-      }
-    } else {
-      const { unlocked, touched } = coarseStatusMaps(store, res);
-      for (const cell of cells) {
-        if (!unlocked.has(cell) && touched.has(cell)) {
-          feats.push({
-            type: 'Feature',
-            id: cell,
-            properties: { h3: cell },
-            geometry: { type: 'Polygon', coordinates: [boundaryFor(cell)] },
-          });
-        }
-      }
-    }
-    const sig = `reveal:${viewportKey()}:${feats.map((f) => f.id).join(',')}`;
-    if (sig !== revealKey) {
-      src.setData({ type: 'FeatureCollection', features: feats });
-      revealKey = sig;
-    }
-  }
-
-  function clearHexReveal() {
-    const src = map.getSource('hex-reveal');
-    if (src && revealKey !== 'empty') {
-      src.setData(EMPTY_COLLECTION);
-      revealKey = 'empty';
-    }
-  }
-
   function paintSemanticBand(store, band) {
     // Packs lazy-load on first zoom-out; full hex fog covers the wait and
     // any region without semantic data (the only place hexes still fill).
@@ -394,13 +333,11 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         if (loaded && lastStoreRef) schedulePaint(lastStoreRef);
       });
       paintHexFog(store, { reveal: true });
-      clearHexReveal();
       return;
     }
     const ctr = map.getCenter();
     if (!bandCovers(band, ctr.lng, ctr.lat)) {
       paintHexFog(store, { reveal: true });
-      clearHexReveal();
       return;
     }
     const areaStats = areas.computeAreaStats(store);
@@ -412,10 +349,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     let extraLabel = null;
     if (band === 'area') {
       // Area band: uniform locked hex base (ladder) + ward polygons, whose
-      // fills/labels carry every state. Street exploration echoes through
-      // the hex-reveal overlay (hard on at 12.70).
+      // fills/labels carry every state.
       paintHexFog(store);
-      paintHexReveal(store);
       const areaItems = areas.getPack('areas');
       updateBandSources('area', areaItems, areaStats, areaItems, areaStats, null);
       return;
@@ -496,10 +431,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     }
     updateBandSources(band, items, stats, labels, labelStats, extraLabel);
     // Hex base under every polygon band (uniform locked — statuses reveal
-    // at street only, echoing through the Area band overlay). The ladder
-    // auto-degrades resolution to stay in budget, so the base never blanks.
+    // at street only). The ladder auto-degrades resolution to stay in
+    // budget, so the base never blanks.
     paintHexFog(store);
-    clearHexReveal();
   }
 
   function doPaint(store) {
@@ -510,10 +444,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     if (band === 'street') {
       const areaStats = areas.levelReady('area') ? areas.computeAreaStats(store) : null;
       // Street base = H9 hex fog with full per-hex exploration; ward
-      // fills + labels overlay it (no ward borders at any band). The
-      // reveal overlay is redundant here — main layer shows it all.
+      // fills + labels overlay it for orientation (no ward borders).
       paintHexFog(store, { forceRes9: true, reveal: true });
-      clearHexReveal();
       // Area fills + labels overlay the street hexes for orientation.
       if (areaStats) {
         const items = areas.getPack('areas');
@@ -550,9 +482,6 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
 
   map.on('load', () => {
     map.addSource('hex-fog', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-    // Overlay for street-level exploration above the area fills
-    // (hard on at 12.70). Fed only in the Area band.
-    map.addSource('hex-reveal', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addSource('activities', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     for (const band of ['area', 'district', 'city', 'state', 'country', 'continent']) {
       map.addSource(`${band}-tiles`, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -597,7 +526,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // H3 ids so status changes animate through paint transitions.
     const FADE = 0.4;
     const BAND_VIS = {
-      area: { min: 10.5, max: 13.25, text: [11.0, 10, 13, 14] },
+      area: { min: 10.5, max: 12.7, text: [11.0, 10, 13, 14] },
       district: { min: 6.5, max: 9.3, text: [6.5, 10, 12, 15] },
       city: { min: 9.3, max: 10.5, text: [8.5, 11, 10, 16] },
       state: { min: 3.0, max: 6.5, text: [3.0, 10, 8, 15] },
@@ -665,21 +594,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         'fill-opacity-transition': { duration: 300, delay: 0 },
       },
     });
-    // Reveal overlay: explored street hexes, hard on at 12.70 (no fade).
-    // Polygons paint above this.
-    map.addLayer({
-      id: 'hex-reveal',
-      type: 'fill',
-      source: 'hex-reveal',
-      minzoom: 12.7,
-      maxzoom: 22,
-      paint: {
-        'fill-antialias': false,
-        'fill-color': '#5eb0e5',
-        'fill-opacity': 0.55,
-        'fill-opacity-transition': { duration: 300, delay: 0 },
-      },
-    });
+    // Area labels overlay the street hexes for orientation (their window
+    // runs open-top); polygon fills hard-switch per FILL_WINDOW.
     for (const [band, vis] of Object.entries(BAND_VIS)) {
       const openTop = band === 'area';
       const ramp = bandRamp(vis.min, vis.max, openTop);
