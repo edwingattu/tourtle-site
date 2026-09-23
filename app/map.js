@@ -670,12 +670,16 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       const openTop = band === 'area';
       const ramp = bandRamp(vis.min, vis.max, openTop);
       const visMin = Math.max(0, vis.min - FADE);
-      const visMax = openTop ? 22 : vis.max + FADE;
-      // Area fills/labels start exactly at the City→Area edge (11.0): no
-      // FADE lead-in, so Area tiles never leak into the City band.
-      // The fill layer cuts at the Street handoff (13.25) while labels
-      // continue as the street overlay.
-      const edgeMin = band === 'area' ? vis.min : visMin;
+      // Labels are strictly windowed (no FADE lead-in/out): each band's
+      // names enter exactly at its lower edge and leave at its upper edge
+      // (area labels continue as the street overlay). Quick 0.15-zoom
+      // fades inside the edges keep it smooth without breaking the
+      // Country → State → District → City → Area → Street order.
+      const labelMax = band === 'area' ? 22 : vis.max;
+      const labelOpacity = band === 'area'
+        ? ramp
+        : ['interpolate', ['linear'], ['zoom'],
+           vis.min, 0, vis.min + 0.15, 1, vis.max - 0.15, 1, vis.max, 0];
       // Fill opacity per band: fade legs at both window edges, full base
       // between. 'B' = set base fill (status match). District's 6.40 was
       // read as 6.60 (symmetric 0.1 in-leg with the stated 6.50 zero).
@@ -737,8 +741,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         id: `${band}-labels`,
         type: 'symbol',
         source: `${band}-labels`,
-        minzoom: edgeMin,
-        maxzoom: visMax,
+        minzoom: vis.min,
+        maxzoom: labelMax,
         layout: {
           'text-field': ['get', 'name'],
           'text-font': ['Noto Sans Regular'],
@@ -748,7 +752,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         },
         paint: {
           'text-color': LABEL_COLOR,
-          'text-opacity': ramp,
+          'text-opacity': labelOpacity,
           'text-opacity-transition': { duration: 300, delay: 0 },
           'text-halo-color': LABEL_HALO,
           'text-halo-width': 1.5,
