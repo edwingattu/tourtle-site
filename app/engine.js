@@ -212,7 +212,13 @@ export function createEngine() {
   function touchCell(cell, { dwellMs = 0, boostMs = 0 } = {}) {
     const rec = ensureTile(store, cell);
     rec.dwellMs += dwellMs;
-    rec.boostMs += boostMs;
+    // Boosts never bank: only the seconds still needed toward unlock are
+    // farmed from the boost, the rest is discarded. Post-unlock boosts are
+    // inconsequential (room is zero or negative).
+    if (boostMs > 0) {
+      const room = CONFIG.dwellThresholdMs - rec.dwellMs - rec.boostMs;
+      rec.boostMs += Math.max(0, Math.min(boostMs, room));
+    }
     const unlockedNow = maybeUnlock(rec);
     if (store.outing) {
       if (!store.outing.touched.includes(cell)) store.outing.touched.push(cell);

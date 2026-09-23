@@ -1,8 +1,8 @@
 /** Server-shaped V0 config. Thresholds stay in one place so they can later move to Supabase. */
 export const CONFIG = {
   h3Resolution: 9,
-  dwellThresholdMs: 10 * 60 * 1000,
-  activityBoostMs: 5 * 60 * 1000,
+  dwellThresholdMs: 3 * 60 * 1000,
+  activityBoostMs: 90 * 1000,
   outingInactivityMs: 2 * 60 * 60 * 1000,
   maxRenderCells: 2800,
   // Semantic tiles: unlocked at 30% of members, mastered at 50% (same
