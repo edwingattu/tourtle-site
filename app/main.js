@@ -244,6 +244,22 @@ function bindUi() {
     mapView.recenter();
     toast('Centered on your current tile.');
   });
+  const zoomSlider = $('#zoomSlider');
+  if (zoomSlider) {
+    const zMin = parseFloat(zoomSlider.min);
+    const zMax = parseFloat(zoomSlider.max);
+    const syncZoomSlider = () => {
+      if (document.activeElement === zoomSlider) return;
+      const z = mapView.map.getZoom();
+      zoomSlider.value = String(Math.min(zMax, Math.max(zMin, z)));
+    };
+    mapView.map.on('zoom', syncZoomSlider);
+    mapView.map.on('zoomend', syncZoomSlider);
+    mapView.ready().then(syncZoomSlider);
+    zoomSlider.addEventListener('input', () => {
+      mapView.map.setZoom(parseFloat(zoomSlider.value));
+    });
+  }
   $('#tileInfoButton').addEventListener('click', (e) => {
     e.stopPropagation();
     const snap = engine.getSnapshot();
