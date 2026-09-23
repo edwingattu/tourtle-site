@@ -103,8 +103,7 @@ button {
   position: absolute;
   z-index: 3;
   right: 24px;
-  top: 50%;
-  transform: translateY(-50%);
+  bottom: calc(357px + env(safe-area-inset-bottom, 0px));
   display: grid;
   gap: 9px;
 }
@@ -778,7 +777,7 @@ button {
  * very short (landscape phones): slider hides, pinch zoom covers it. */
 @media (max-height: 740px) {
   .map-controls {
-    top: 38%;
+    bottom: calc(327px + env(safe-area-inset-bottom, 0px));
   }
   .zoom-slider {
     height: 120px;
@@ -789,6 +788,9 @@ button {
 }
 
 @media (max-height: 500px) {
+  .map-controls {
+    bottom: calc(185px + env(safe-area-inset-bottom, 0px));
+  }
   .zoom-slider {
     display: none;
   }

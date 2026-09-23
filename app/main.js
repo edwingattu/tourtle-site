@@ -1,10 +1,8 @@
-import { CONFIG, DEMO_WALK } from './config.js';
+import { CONFIG } from './config.js';
 import { getSession, requireSessionOrRedirect, signOut } from './auth.js';
 import {
-  bearingBetween,
   cellAt,
   createEngine,
-  destinationPoint,
   progressPercent,
   remainingLabel,
 } from './engine.js';
@@ -36,7 +34,6 @@ const locationFilter = {
 let tracking = false;
 let watchId = null;
 let selectedCell = engine.getSnapshot().store.baseCell;
-let walkIndex = 0;
 let captureType = 'photo';
 let selectedCategory = 'dining';
 let placeCache = new Map();
@@ -183,18 +180,6 @@ function setTracking(on) {
   }
 }
 
-function simulateStep() {
-  const here = mapView.getUserLocation();
-  const target = DEMO_WALK[walkIndex % DEMO_WALK.length];
-  const nextTarget = DEMO_WALK[(walkIndex + 1) % DEMO_WALK.length];
-  const distToTarget = Math.hypot(target[0] - here.lng, target[1] - here.lat);
-  if (distToTarget < 0.0004) walkIndex += 1;
-  const heading = bearingBetween(here.lat, here.lng, nextTarget[1], nextTarget[0]);
-  const next = destinationPoint(here.lat, here.lng, heading, CONFIG.simulateStepMeters);
-  applyPosition(next.lat, next.lng, { dwellMs: 90_000, fly: true });
-  toast('Moved ~95m onto the next real H3 cell. Ten minutes of dwell (or an Activity) unlocks it.');
-}
-
 function openDialog(type) {
   captureType = type;
   const copy = {
@@ -226,20 +211,6 @@ function bindUi() {
   });
 
   $('#trackingButton').addEventListener('click', () => setTracking(!tracking));
-  $('#quickProgressButton').addEventListener('click', simulateStep);
-  $('#refreshButton').addEventListener('click', () => {
-    $('#refreshButton').animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], {
-      duration: 500,
-    });
-    if (!tracking) {
-      toast('Turn on fog clearing to catch up your map.');
-      return;
-    }
-    const { lat, lng } = mapView.getUserLocation();
-    engine.dwell(cellAt(lat, lng), 60_000);
-    renderHud();
-    toast('Foreground refresh — fog caught up from the last batch.');
-  });
   $('#recenterButton').addEventListener('click', () => {
     mapView.recenter();
     toast('Centered on your current tile.');
