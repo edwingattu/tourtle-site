@@ -86,9 +86,10 @@ export async function flush(engine) {
     }
 
     // 2. Activities since cursor (upsert by id: retries are idempotent).
+    // Sandbox-tagged activities never leave the device.
     const cursor = snap.store.activityCursor;
     const fresh = snap.store.activities.filter(
-      (a) => !cursor || new Date(a.createdAt).toISOString() > cursor,
+      (a) => !a.sandbox && (!cursor || new Date(a.createdAt).toISOString() > cursor),
     );
     if (fresh.length) {
       const rows = fresh.map((a) => ({
@@ -151,10 +152,12 @@ function seedMigration(engine) {
   engine.markPushed([]); // persist seed + flag
 }
 
-/** Launch sequence: seed local history, push it up, then pull canonical state. */
+/** Launch sequence: roll back any sandbox gains (never seedable/uploadable),
+ * seed local history, push it up, then pull canonical state. */
 export async function bootstrap(engine) {
   try {
     console.log('[sync] bootstrap start');
+    engine.rollbackSandbox();
     seedMigration(engine);
     await flush(engine);
     await pullAll(engine);

@@ -189,6 +189,56 @@ button {
   display: block;
 }
 
+.map-control.active {
+  background: var(--navy);
+  color: #fff;
+}
+
+/* Sandbox joystick pad: bottom-left, above the summary card. */
+.joystick {
+  position: absolute;
+  z-index: 3;
+  left: 24px;
+  bottom: calc(210px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.joystick[hidden] {
+  display: none;
+}
+
+.joy-base {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(248, 247, 242, 0.92);
+  box-shadow: 0 4px 16px rgba(21, 73, 60, 0.12);
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  cursor: pointer;
+}
+
+.joy-nub {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--navy);
+  box-shadow: 0 2px 8px rgba(17, 47, 80, 0.35);
+}
+
+.joy-tag {
+  margin: 0;
+  font: 700 9px "DM Mono", monospace;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: rgba(23, 54, 104, 0.8);
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
 .bottom-card {
   position: absolute;
   z-index: 4;

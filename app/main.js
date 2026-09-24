@@ -8,6 +8,7 @@ import {
 } from './engine.js';
 import { createMap } from './map.js';
 import { bootstrap, exposeDebug, flush } from './sync.js';
+import { setupJoystick } from './joystick.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -323,6 +324,7 @@ await bootstrap(engine);
 exposeDebug(window, engine);
 selectCell(mapView.cellUnderUser());
 bindUi();
+setupJoystick({ mapView, engine, selectCell, toast });
 renderHud();
 mapView.paint(engine.getSnapshot().store);
 setInterval(tick, 1000);

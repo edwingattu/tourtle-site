@@ -120,6 +120,10 @@ function emptyStore() {
     // Cloud outbox: per-cell deltas not yet pushed (cleared only after the
     // server confirms). Survives reloads and crashes inside localStorage.
     pending: {},
+    // Sandbox ledger (joystick diagnostics): per-cell gains accrued while
+    // sandboxMode was on. Persisted so a reload can't launder them into a
+    // push — bootstrap rolls them back before any seed or upload.
+    sandbox: {},
     // ISO timestamp of the newest activity already pushed to the cloud.
     activityCursor: null,
   };
@@ -185,6 +189,9 @@ export function createEngine() {
   }
 
   const listeners = new Set();
+  // Joystick diagnostics flag: touches accrue locally but are ledgered for
+  // rollback and excluded from outbox, outing, streak, and activity uploads.
+  let sandboxMode = false;
   const emit = (extra = {}) => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
@@ -216,6 +223,8 @@ export function createEngine() {
 
   function touchCell(cell, { dwellMs = 0, boostMs = 0 } = {}) {
     const rec = ensureTile(store, cell);
+    const prevExisted = rec.dwellMs > 0 || rec.boostMs > 0 || !!rec.unlockedAt;
+    const prevUnlockedAt = rec.unlockedAt;
     rec.dwellMs += dwellMs;
     // Boosts never bank: only the seconds still needed toward unlock are
     // farmed from the boost, the rest is discarded. Post-unlock boosts are
@@ -226,18 +235,30 @@ export function createEngine() {
       rec.boostMs += Math.max(0, Math.min(boostMs, room));
     }
     const appliedBoost = rec.boostMs - boostBefore;
-    // Record exactly what landed as an unsent delta for the cloud outbox.
-    if (dwellMs > 0 || appliedBoost > 0) {
+    if (sandboxMode) {
+      // Sandbox (joystick diagnostics): visible locally, never cloud-bound.
+      // Gains ledger for rollback; outbox, outing, and streak stay untouched.
+      if (dwellMs > 0 || appliedBoost > 0) {
+        const s =
+          store.sandbox[cell] ||
+          (store.sandbox[cell] = { dwell: 0, boost: 0, prevUnlockedAt, prevExisted });
+        s.dwell += dwellMs;
+        s.boost += appliedBoost;
+      }
+    } else if (dwellMs > 0 || appliedBoost > 0) {
+      // Record exactly what landed as an unsent delta for the cloud outbox.
       const p = store.pending[cell] || (store.pending[cell] = { dwell: 0, boost: 0 });
       p.dwell += dwellMs;
       p.boost += appliedBoost;
     }
     const unlockedNow = maybeUnlock(rec);
-    if (store.outing) {
-      if (!store.outing.touched.includes(cell)) store.outing.touched.push(cell);
-      store.outing.lastTouchAt = Date.now();
+    if (!sandboxMode) {
+      if (store.outing) {
+        if (!store.outing.touched.includes(cell)) store.outing.touched.push(cell);
+        store.outing.lastTouchAt = Date.now();
+      }
+      bumpStreak(store);
     }
-    bumpStreak(store);
     return { rec, unlockedNow, cell };
   }
 
@@ -264,6 +285,38 @@ export function createEngine() {
       });
       emit({ type: 'boost', cells, unlocked });
       return unlocked;
+    },
+    // ---- Sandbox (joystick diagnostics): temporary by construction ----
+    isSandbox() {
+      return sandboxMode;
+    },
+    setSandbox(on) {
+      sandboxMode = !!on;
+      // Leaving sandbox wipes its gains back out of local totals.
+      if (!sandboxMode) return this.rollbackSandbox();
+      return false;
+    },
+    rollbackSandbox() {
+      const ledger = store.sandbox || {};
+      const cells = Object.keys(ledger);
+      if (!cells.length) return false;
+      for (const cell of cells) {
+        const s = ledger[cell];
+        const rec = store.tiles[cell];
+        if (rec) {
+          rec.dwellMs = Math.max(0, rec.dwellMs - (s.dwell || 0));
+          rec.boostMs = Math.max(0, rec.boostMs - (s.boost || 0));
+          if (rec.unlockedAt && !s.prevUnlockedAt && tileProgress(rec) < CONFIG.dwellThresholdMs) {
+            rec.unlockedAt = null;
+          }
+          if (!s.prevExisted && rec.dwellMs <= 0 && rec.boostMs <= 0 && !rec.unlockedAt) {
+            delete store.tiles[cell];
+          }
+        }
+      }
+      store.sandbox = {};
+      emit();
+      return true;
     },
     // ---- Cloud sync helpers (delta-additive merge) ----
     // Pending deltas, keyed by cell. The caller pushes them, then marks
@@ -383,6 +436,8 @@ export function createEngine() {
         cell,
         createdAt: Date.now(),
         tiles: store.outing ? [...store.outing.touched] : [cell],
+        // Sandbox activities stay local: flush() filters on this flag.
+        sandbox: sandboxMode,
       };
       store.activities.push(activity);
       const boostTargets = activity.tiles.length ? activity.tiles : [cell];
