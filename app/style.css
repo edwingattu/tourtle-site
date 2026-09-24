@@ -274,7 +274,7 @@ button {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 8px 17px 0;
+  padding: 8px 17px 16px;
   cursor: pointer;
   flex: none;
 }
@@ -507,10 +507,8 @@ button {
 }
 
 #tileProgressTrack {
-  margin: 10px -17px 0 -17px;
-  width: calc(100% + 34px);
-  border-radius: 0 0 18px 18px;
-  height: 6px;
+  margin-top: 10px;
+  width: 100%;
 }
 
 .progress-track span {
