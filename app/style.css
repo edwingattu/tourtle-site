@@ -316,14 +316,18 @@ button {
 
 @media (max-width: 520px) {
   .summary-text {
-    flex-direction: column;
     gap: 12px;
   }
   .summary-right {
-    padding-left: 0;
-    border-left: none;
-    border-top: 1px solid var(--line);
-    padding-top: 12px;
+    padding-left: 12px;
+  }
+  .header-counts {
+    padding: 6px 8px;
+  }
+  .count-box {
+    min-width: 34px;
+    height: 32px;
+    font-size: 14px;
   }
 }
 
