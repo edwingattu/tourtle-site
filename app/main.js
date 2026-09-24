@@ -102,10 +102,24 @@ function updateCityTitle() {
 
 function updateAreaName() {
   const el = $('#areaName');
+  const coordsEl = $('#coords');
   if (!el) return;
   const { lng, lat } = mapView ? mapView.getUserLocation() : { lng: CONFIG.defaultCenter[0], lat: CONFIG.defaultCenter[1] };
   const area = areasDbg.areaAt(lng, lat) || areasDbg.districtAt(lng, lat);
-  el.textContent = area ? area.name : 'Outside mapped areas';
+  const name = area ? area.name : 'Outside mapped areas';
+  // Tile name + lat-long on same line, immediately below title
+  el.childNodes.forEach(() => {});
+  el.textContent = name + ' ';
+  if (coordsEl) {
+    coordsEl.textContent = `· ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    if (!el.contains(coordsEl)) el.appendChild(coordsEl);
+  } else {
+    const span = document.createElement('span');
+    span.className = 'coords';
+    span.id = 'coords';
+    span.textContent = `· ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    el.appendChild(span);
+  }
 }
 
 function updateCountdown(rec) {

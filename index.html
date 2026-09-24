@@ -44,7 +44,10 @@
         <div class="map-summary" id="summaryToggle" role="button" tabindex="0" aria-expanded="false" aria-controls="detailContent" aria-label="Expand details">
           <div class="summary-text">
             <div class="city-header">
-              <h3 class="territory-title" id="cityTitle">My Hyderabad</h3>
+              <div class="title-stack">
+                <h3 class="territory-title" id="cityTitle">My Hyderabad</h3>
+                <p class="area-name" id="areaName">Locating area… <span class="coords" id="coords"></span></p>
+              </div>
               <div class="header-counts">
                 <div class="count-panel" aria-label="Areas">
                   <span class="panel-title">Areas</span>
@@ -73,7 +76,6 @@
                 </div>
               </div>
             </div>
-            <p class="area-name" id="areaName">Locating area…</p>
             <div class="countdown-row" id="countdownRow">
               <span class="countdown-text" id="countdownText">Current Tile Unlocks in <b id="countdown">3:00</b></span>
               <span class="lock-icon" id="lockIcon" aria-hidden="true"></span>

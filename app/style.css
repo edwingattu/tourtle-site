@@ -314,16 +314,26 @@ button {
 
 .territory-title {
   margin: 0;
-  font: 600 17px Manrope, sans-serif;
+  font: 800 18px Manrope, sans-serif;
+  letter-spacing: -0.02em;
 }
 
-/* My City header: title left, counts flush right */
+.title-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+/* My City header: title stack top-left, counts flush right */
 .city-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 4px;
+  margin-bottom: 10px;
 }
 
 .city-header .header-counts {
@@ -441,12 +451,20 @@ button {
 }
 
 .area-name {
-  margin: 0 0 10px;
+  margin: 0;
   color: #667874;
   font: 600 12px Manrope, sans-serif;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.area-name .coords {
+  color: #8a9aa8;
+  font: 500 11px "DM Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  margin-left: 6px;
 }
 
 .countdown-row {
