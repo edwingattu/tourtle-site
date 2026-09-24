@@ -204,6 +204,9 @@ function renderHud() {
   const areasUnlEl = $('#areasUnlockedCount');
   if (areasActEl || areasUnlEl) {
     try {
+      // Ensure hex raster is built before stats — otherwise all totals are 0
+      // and activated stays 0 even with live dwell (paint is rAF-deferred).
+      if (areasDbg.levelReady('area')) areasDbg.buildAreaHexes();
       const { areaStats } = areasDbg.getRollup(snap.store);
       let activatedAreas = 0;
       let unlockedAreas = 0;
