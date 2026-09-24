@@ -619,8 +619,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       source: 'hex-fog',
       filter: ['==', ['get', 'status'], 'activated'],
       paint: {
-        'line-color': '#4aa8dd',
-        'line-width': 1.5,
+        'line-color': '#8fd0f2',
+        'line-width': 3,
       },
     });
     // Area labels overlay the street hexes for orientation (their window
