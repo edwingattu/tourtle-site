@@ -598,7 +598,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'unlocked',
           'rgba(0,0,0,0)',
           'activated',
-          '#8fd0f2',
+          '#4aa8dd',
           '#3a4b5e',
         ],
         'fill-opacity': [
