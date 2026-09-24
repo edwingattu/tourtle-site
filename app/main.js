@@ -2,6 +2,7 @@ import { CONFIG } from './config.js';
 import { getSession, requireSessionOrRedirect, signOut } from './auth.js';
 import {
   cellAt,
+  cellCenter,
   createEngine,
   progressPercent,
   remainingLabel,
@@ -9,6 +10,7 @@ import {
 import { createMap } from './map.js';
 import { bootstrap, exposeDebug, flush } from './sync.js';
 import { setupJoystick } from './joystick.js';
+import { regionCenter, regionCredit, regionForPoint, savedRegion, setRegion } from './areas.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -315,9 +317,27 @@ function tick() {
   }
 }
 
+// Region: explicit ?region= wins (persisted), else saved, else GPS detect
+// from the base cell. Must precede map ready (packs load per region).
+let activeRegion = 'hyd';
+{
+  const params = new URLSearchParams(window.location.search);
+  const explicit = params.get('region');
+  const base = cellCenter(engine.getSnapshot().store.baseCell);
+  activeRegion = explicit || savedRegion() || regionForPoint(base.lat, base.lng);
+  setRegion(activeRegion, { persist: !!explicit });
+}
 await mapView.ready();
+if (activeRegion === 'nyc') {
+  const [lng, lat] = regionCenter();
+  mapView.setUserLocation(lng, lat);
+  mapView.map.setCenter([lng, lat]);
+  mapView.map.setZoom(10);
+}
 engine.subscribe(() => mapView.paint(engine.getSnapshot().store));
-mapView.setUserLocation(CONFIG.defaultCenter[0], CONFIG.defaultCenter[1]);
+if (activeRegion !== 'nyc') {
+  mapView.setUserLocation(CONFIG.defaultCenter[0], CONFIG.defaultCenter[1]);
+}
 // Cloud bootstrap (silent-local on failure): seed local history, push it up,
 // pull canonical state — then repaint from merged totals.
 await bootstrap(engine);
@@ -325,6 +345,10 @@ exposeDebug(window, engine);
 selectCell(mapView.cellUnderUser());
 bindUi();
 setupJoystick({ mapView, engine, selectCell, toast });
+{
+  const credit = $('#dataCredit');
+  if (credit) credit.textContent = regionCredit();
+}
 renderHud();
 mapView.paint(engine.getSnapshot().store);
 setInterval(tick, 1000);

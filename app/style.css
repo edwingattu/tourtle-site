@@ -667,6 +667,13 @@ button {
   font: 700 12px "DM Mono", monospace;
 }
 
+.data-credit {
+  margin: 18px 0 4px;
+  color: #84908a;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
 .dialog {
   border: 0;
   padding: 0;

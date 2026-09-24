@@ -7,16 +7,91 @@ import { cellCenter, cellsForPolygon, isUnlocked } from './engine.js';
  * (areas) or a set of child tiles (everything above). Status aggregates
  * upward with the same fraction rule at every level.
  *
- * Data packs live in ./data/*.json (built by scripts/build-areas.py).
+ * Data packs: ./data/*.json for the Hyderabad region (global states+
+ * countries), ./data/<region>/*.json per added city (meta/areas/districts),
+ * built by scripts/build-areas.py / build-nyc.py.
  * areas.json loads at startup; upper packs lazy-load on first zoom-out.
  */
 const packs = { meta: null, areas: null, districts: null, states: null, countries: null };
-const loading = {};
+let loading = {};
+
+// ---- Regions: per-city area/district/meta packs; states+countries global.
+// Only the active region's packs are ever fetched (lazy per-region load).
+const REGIONS = {
+  hyd: {
+    dir: '',
+    bbox: [77.0, 16.8, 79.0, 18.2],
+    center: [78.4867, 17.4375],
+    credit:
+      'Boundaries: GHMC wards via OpenStreetMap (ODbL) · Districts: datta07 · States: GADM · Countries: Natural Earth',
+  },
+  nyc: {
+    dir: 'nyc/',
+    bbox: [-74.6, 40.3, -73.4, 41.0],
+    center: [-73.9855, 40.758],
+    credit:
+      'Boundaries: NYC Dept. of City Planning / NYC Open Data · State: GADM · Countries: Natural Earth',
+  },
+};
+const REGION_KEY = 'tourtle.v0.region';
+let region = 'hyd';
+
+export function getRegion() {
+  return region;
+}
+
+export function regionCredit() {
+  return REGIONS[region].credit;
+}
+
+export function regionCenter() {
+  return REGIONS[region].center;
+}
+
+/** GPS detect: NYC bbox wins, everything else is Hyderabad (V0 footprint). */
+export function regionForPoint(lat, lng) {
+  const b = REGIONS.nyc.bbox;
+  if (lng >= b[0] && lat >= b[1] && lng <= b[2] && lat <= b[3]) return 'nyc';
+  return 'hyd';
+}
+
+/** Switch region, dropping cached packs/geometry. Returns true if changed. */
+export function setRegion(next, { persist = false } = {}) {
+  if (!REGIONS[next]) next = 'hyd';
+  if (persist) {
+    try {
+      localStorage.setItem(REGION_KEY, next);
+    } catch {
+      /* private mode */
+    }
+  }
+  if (next === region && packs.meta) return false;
+  region = next;
+  packs.meta = packs.areas = packs.districts = null;
+  loading = {};
+  cityDistrictCache = null;
+  cityItemCache = null;
+  hexToArea = new Map();
+  areaHexMembers = new Map();
+  hexRasterBuilt = false;
+  return true;
+}
+
+export function savedRegion() {
+  try {
+    const r = localStorage.getItem(REGION_KEY);
+    return REGIONS[r] ? r : null;
+  } catch {
+    return null;
+  }
+}
 
 let hexToArea = new Map();
 
 function packUrl(name) {
-  return new URL(`./data/${name}.json`, import.meta.url);
+  // Region packs (meta/areas/districts) live per-city; states+countries global.
+  const dir = name === 'states' || name === 'countries' ? '' : REGIONS[region].dir;
+  return new URL(`./data/${dir}${name}.json`, import.meta.url);
 }
 
 export async function loadCore() {
