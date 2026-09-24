@@ -473,15 +473,15 @@ button {
 .countdown-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 6px;
   font-size: 11px;
   color: #667874;
   margin-bottom: 8px;
 }
 
 .countdown-text {
-  flex: 1;
+  flex: none;
   min-width: 0;
 }
 
