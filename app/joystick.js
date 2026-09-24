@@ -13,7 +13,7 @@ const STEP_MS = 120;
 const DEADZONE = 0.15;
 const SELECT_THROTTLE_MS = 2000;
 
-export function setupJoystick({ mapView, engine, selectCell, toast }) {
+export function setupJoystick({ mapView, engine, selectCell, toast, getRegion, switchRegion }) {
   const btn = document.getElementById('joystickButton');
   const pad = document.getElementById('joystick');
   const base = pad?.querySelector('.joy-base');
@@ -25,6 +25,7 @@ export function setupJoystick({ mapView, engine, selectCell, toast }) {
   let timer = 0;
   let lastCell = null;
   let lastSelectAt = 0;
+  let prevRegion = null;
 
   function setNub(dx, dy) {
     nub.style.transform = `translate(${dx}px, ${dy}px)`;
@@ -52,7 +53,7 @@ export function setupJoystick({ mapView, engine, selectCell, toast }) {
     }
   }
 
-  function enable() {
+  async function enable() {
     active = true;
     lastCell = null;
     lastSelectAt = 0;
@@ -60,6 +61,10 @@ export function setupJoystick({ mapView, engine, selectCell, toast }) {
     btn.classList.add('active');
     btn.setAttribute('aria-pressed', 'true');
     pad.hidden = false;
+    // Sandbox teleports to Manhattan AND loads NYC packs — region follows
+    // the pointer, restored on disable.
+    prevRegion = getRegion?.() || 'hyd';
+    await switchRegion?.('nyc');
     mapView.setUserLocation(NYC.lng, NYC.lat);
     mapView.map.easeTo({
       center: [NYC.lng, NYC.lat],
@@ -71,7 +76,7 @@ export function setupJoystick({ mapView, engine, selectCell, toast }) {
     toast?.('Sandbox joystick — exploration is temporary and never syncs.');
   }
 
-  function disable() {
+  async function disable() {
     active = false;
     window.clearInterval(timer);
     vec = { x: 0, y: 0 };
@@ -80,6 +85,7 @@ export function setupJoystick({ mapView, engine, selectCell, toast }) {
     btn.classList.remove('active');
     btn.setAttribute('aria-pressed', 'false');
     pad.hidden = true;
+    await switchRegion?.(prevRegion || 'hyd');
     toast?.('Sandbox cleared — temporary exploration removed.');
   }
 

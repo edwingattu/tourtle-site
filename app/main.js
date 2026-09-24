@@ -156,6 +156,9 @@ function startWatch() {
       $('#signalLabel').textContent = fix.weak ? 'GPS weak — dwell paused' : 'Live GPS';
       applyPosition(fix.lat, fix.lng, { fly: false });
       engine.setBase(fix.lat, fix.lng);
+      // Real travel across regions: packs follow the base (sandbox excluded —
+      // the joystick manages its own region).
+      if (!engine.isSandbox()) autoRegion(fix.lat, fix.lng);
     },
     () => {
       toast('Location permission denied. Simulator still walks real tiles.');
@@ -329,6 +332,34 @@ let activeRegion = 'hyd';
   setRegion(activeRegion, { persist: !!explicit });
   console.log(`[region] active=${activeRegion} explicit=${explicit} saved=${savedRegion()}`);
 }
+/** Swap the active region's packs and repaint. Districts lazy-load on zoom. */
+let regionSwitching = false;
+async function switchRegion(next) {
+  if (regionSwitching || areasDbg.getRegion() === next) return;
+  regionSwitching = true;
+  try {
+    areasDbg.setRegion(next);
+    await areasDbg.loadCore();
+    activeRegion = next;
+    mapView.paint(engine.getSnapshot().store);
+    selectCell(mapView.cellUnderUser());
+    const credit = $('#dataCredit');
+    if (credit) credit.textContent = areasDbg.regionCredit();
+    console.log(`[region] switched to ${next}`);
+  } finally {
+    regionSwitching = false;
+  }
+}
+
+/** GPS-driven region follow (real travel). Sandbox manages its own region. */
+function autoRegion(lat, lng) {
+  const next = regionForPoint(lat, lng);
+  if (next !== areasDbg.getRegion()) {
+    switchRegion(next);
+    toast(next === 'nyc' ? 'Welcome to New York — loading local tiles.' : 'Welcome home — loading Hyderabad tiles.');
+  }
+}
+
 await mapView.ready();
 if (activeRegion === 'nyc') {
   const [lng, lat] = regionCenter();
@@ -359,7 +390,14 @@ exposeDebug(window, engine);
 }
 selectCell(mapView.cellUnderUser());
 bindUi();
-setupJoystick({ mapView, engine, selectCell, toast });
+setupJoystick({
+  mapView,
+  engine,
+  selectCell,
+  toast,
+  getRegion: areasDbg.getRegion,
+  switchRegion,
+});
 {
   const credit = $('#dataCredit');
   if (credit) credit.textContent = regionCredit();
