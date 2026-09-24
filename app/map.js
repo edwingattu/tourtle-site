@@ -610,19 +610,17 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         'fill-opacity-transition': { duration: 300, delay: 0 },
       },
     });
-    // Activated-hex border: same grey fill (identical overdraw, invisible),
-    // blue outline. Filtered to activated so locked hexes stay borderless.
+    // Activated-hex border: a true line layer over the shared grey fill —
+    // no fill of its own, so nothing double-draws. Filtered to activated
+    // so locked hexes stay borderless.
     map.addLayer({
       id: 'hex-active-borders',
-      type: 'fill',
+      type: 'line',
       source: 'hex-fog',
       filter: ['==', ['get', 'status'], 'activated'],
       paint: {
-        'fill-antialias': false,
-        'fill-color': '#3a4b5e',
-        'fill-opacity': 0.62,
-        'fill-outline-color': '#4aa8dd',
-        'fill-opacity-transition': { duration: 300, delay: 0 },
+        'line-color': '#4aa8dd',
+        'line-width': 1.5,
       },
     });
     // Area labels overlay the street hexes for orientation (their window
