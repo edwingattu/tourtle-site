@@ -45,22 +45,30 @@
             <div class="city-header">
               <h3 class="territory-title" id="cityTitle">My Hyderabad</h3>
               <div class="header-counts">
-                <div class="count-group" aria-label="Areas">
+                <div class="count-panel" aria-label="Areas">
+                  <span class="panel-title">Areas</span>
                   <div class="count-boxes">
-                    <div class="count-box activated" id="areasActivatedBox" aria-label="Activated areas">
-                      <b id="areasActivatedCount">0</b><span class="box-dot blue" aria-hidden="true"></span>
+                    <div class="count-item">
+                      <div class="count-box activated" id="areasActivatedBox" aria-label="Activated areas">
+                        <b id="areasActivatedCount">0</b><span class="box-dot blue" aria-hidden="true"></span>
+                      </div>
+                      <span class="box-sublabel">Active</span>
                     </div>
-                    <div class="count-box unlocked" id="areasUnlockedBox" aria-label="Unlocked areas">
-                      <b id="areasUnlockedCount">0</b><span class="box-dot green" aria-hidden="true"></span>
+                    <div class="count-item">
+                      <div class="count-box unlocked" id="areasUnlockedBox" aria-label="Unlocked areas">
+                        <b id="areasUnlockedCount">0</b><span class="box-dot green" aria-hidden="true"></span>
+                      </div>
+                      <span class="box-sublabel">Unlocked</span>
                     </div>
                   </div>
-                  <span class="count-label">Areas</span>
                 </div>
-                <div class="count-group" aria-label="Tiles">
-                  <div class="count-box neutral" id="tilesUnlockedBox" aria-label="Tiles unlocked">
+                <span class="count-divider" aria-hidden="true"></span>
+                <div class="count-panel" aria-label="Tiles">
+                  <span class="panel-title">Tiles</span>
+                  <div class="count-box neutral" id="tilesUnlockedBox" aria-label="Tiles explored">
                     <b id="tilesUnlockedCount">0</b>
                   </div>
-                  <span class="count-label">Tiles</span>
+                  <span class="box-sublabel">Explored</span>
                 </div>
               </div>
             </div>
