@@ -460,11 +460,14 @@ button {
   max-width: 100%;
 }
 
-.area-name .coords {
+.hex-line {
+  margin: 1px 0 0;
   color: #8a9aa8;
-  font: 500 11px "DM Mono", monospace;
-  font-variant-numeric: tabular-nums;
-  margin-left: 6px;
+  font: 500 10px "DM Mono", monospace;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .countdown-row {
