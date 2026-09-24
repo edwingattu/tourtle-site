@@ -51,6 +51,19 @@ def simplify_ring(ring, dec, tol):
         pass
     elif pts and pts[0] != pts[-1]:
         pts.append(pts[0])
+    # Strip exactly-collinear middles: rounding can collapse a thin triangle
+    # into a zero-area sliver, which H3's polyfill rejects outright.
+    if len(pts) > 4:
+        keep = [pts[0]]
+        for i in range(1, len(pts) - 1):
+            x0, y0 = keep[-1]
+            x1, y1 = pts[i]
+            x2, y2 = pts[i + 1]
+            if abs((x1 - x0) * (y2 - y1) - (y1 - y0) * (x2 - x1)) < 1e-15:
+                continue
+            keep.append(pts[i])
+        keep.append(pts[-1])
+        pts = keep
     if len(pts) <= 4:
         return [[float(a), float(b)] for a, b in pts]
     out = [pts[0]]
@@ -130,11 +143,12 @@ def main():
     ny_item = {'id': NY_STATE_ID, 'name': 'New York', 'parent': USA_ID,
                'c': [round(v, 4) for v in centroid_of(ny_mp)], 'polys': ny_mp}
 
-    # ---- city = NTA union ----
-    all_polys = [p for n in nta_items for p in n['polys']]
+    # ---- city = NTA union; center = mean of borough centroids (the union's
+    # largest single ring can be an outlying water body — never use it).
     city = {'id': 'city-newyork', 'name': 'New York',
             'members': sorted(boro_by_name.values()),
-            'c': centroid_of(all_polys)}
+            'c': [round(sum(b['c'][0] for b in boro_items) / len(boro_items), 4),
+                  round(sum(b['c'][1] for b in boro_items) / len(boro_items), 4)]}
 
     # ---- emit ----
     os.makedirs(OUT, exist_ok=True)

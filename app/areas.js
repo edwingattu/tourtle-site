@@ -249,8 +249,13 @@ export function buildAreaHexes() {
   for (const a of packs.areas || []) {
     const set = new Set();
     for (const poly of a.polys) {
-      const outer = poly[0].map(([x, y]) => [y, x]); // [lng,lat] -> [lat,lng]
-      for (const cell of cellsForPolygon(outer)) set.add(cell);
+      // One degenerate ring must never kill the whole raster: skip it.
+      try {
+        const outer = poly[0].map(([x, y]) => [y, x]); // [lng,lat] -> [lat,lng]
+        for (const cell of cellsForPolygon(outer)) set.add(cell);
+      } catch {
+        console.warn(`[areas] skipping unrasterizable ring in ${a.id}`);
+      }
     }
     const members = [];
     for (const cell of set) {
