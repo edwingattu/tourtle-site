@@ -42,14 +42,25 @@
       <div class="bottom-card" id="bottomCard">
         <div class="map-summary" id="summaryToggle" role="button" tabindex="0" aria-expanded="false" aria-controls="detailContent" aria-label="Expand details">
           <div class="summary-text">
-            <p class="eyebrow" id="trackingLabel">Fog clearing off</p>
-            <h3 class="territory-title" id="tileInfoButton">Locating tile…</h3>
-            <p class="hex-meta">H3 r9 · <span id="hexId">—</span> · <span id="signalLabel">GPS idle</span></p>
-            <div class="progress-row">
-              <span>Tile dwell</span>
-              <span id="remainingMinutes">3 more minutes</span>
+            <div class="city-header">
+              <h3 class="territory-title" id="cityTitle">My Hyderabad</h3>
+              <div class="header-counts">
+                <span class="count-chip" id="areasUnlockedChip" aria-label="Areas unlocked">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+                  <b id="areasUnlockedCount">0</b>
+                </span>
+                <span class="count-chip" id="tilesUnlockedChip" aria-label="Tiles unlocked">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l7 4v8l-7 4-7-4V7z"/><path d="M12 11V21"/></svg>
+                  <b id="tilesUnlockedCount">0</b>
+                </span>
+              </div>
             </div>
-            <div class="progress-track">
+            <p class="area-name" id="areaName">Locating area…</p>
+            <div class="countdown-row" id="countdownRow">
+              <span class="countdown-text" id="countdownText">Current Tile Unlocks in <b id="countdown">3:00</b></span>
+              <span class="lock-icon" id="lockIcon" aria-hidden="true"></span>
+            </div>
+            <div class="progress-track" id="tileProgressTrack">
               <span id="tileProgressBar"></span>
             </div>
           </div>

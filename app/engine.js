@@ -481,6 +481,12 @@ export function remainingLabel(rec) {
   return `${minutes} more minute${minutes === 1 ? '' : 's'}`;
 }
 
+export function remainingMs(rec) {
+  if (!rec) return CONFIG.dwellThresholdMs;
+  if (isUnlocked(rec)) return 0;
+  return Math.max(0, CONFIG.dwellThresholdMs - tileProgress(rec));
+}
+
 export function progressPercent(rec) {
   return Math.min(100, Math.round((tileProgress(rec) / CONFIG.dwellThresholdMs) * 100));
 }

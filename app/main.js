@@ -4,8 +4,9 @@ import {
   cellAt,
   cellCenter,
   createEngine,
+  isUnlocked,
   progressPercent,
-  remainingLabel,
+  remainingMs,
 } from './engine.js';
 import { createMap } from './map.js';
 import { bootstrap, exposeDebug, flush } from './sync.js';
@@ -80,6 +81,56 @@ function smoothFix(coords) {
   return { lat, lng, weak: false };
 }
 
+// Summary card helpers: My City title, area name, live mm:ss countdown.
+const LOCK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+const UNLOCK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/><path d="M16 8V6a4 4 0 0 0-4-4"/></svg>';
+
+function formatCountdown(ms) {
+  const totalSec = Math.ceil(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function updateCityTitle() {
+  const el = $('#cityTitle');
+  if (!el) return;
+  // My City — word City replaced by the actual city name the user is in.
+  const label = areasDbg.regionLabel();
+  el.textContent = `My ${label}`;
+}
+
+function updateAreaName() {
+  const el = $('#areaName');
+  if (!el) return;
+  const { lng, lat } = mapView ? mapView.getUserLocation() : { lng: CONFIG.defaultCenter[0], lat: CONFIG.defaultCenter[1] };
+  const area = areasDbg.areaAt(lng, lat) || areasDbg.districtAt(lng, lat);
+  el.textContent = area ? area.name : 'Outside mapped areas';
+}
+
+function updateCountdown(rec) {
+  const row = $('#countdownRow');
+  const textEl = $('#countdownText');
+  const iconEl = $('#lockIcon');
+  const track = $('#tileProgressTrack');
+  const bar = $('#tileProgressBar');
+  if (!textEl || !iconEl || !bar) return;
+  const unlocked = isUnlocked(rec);
+  const pct = progressPercent(rec);
+  bar.style.width = `${pct}%`;
+  if (track) track.classList.toggle('unlocked', unlocked);
+  if (row) row.classList.toggle('unlocked', unlocked);
+  if (unlocked) {
+    textEl.textContent = 'Unlocked';
+    iconEl.innerHTML = UNLOCK_SVG;
+  } else {
+    const left = remainingMs(rec);
+    const mmss = formatCountdown(left);
+    textEl.innerHTML = `Current Tile Unlocks in <b id="countdown">${mmss}</b>`;
+    iconEl.innerHTML = LOCK_SVG;
+  }
+}
+
 async function placeName(lat, lng) {
   const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
   if (placeCache.has(key)) return placeCache.get(key);
@@ -114,12 +165,9 @@ function selectCell(cell, { toastOnSelect = false } = {}) {
   mapView.paint(snap.store);
   const info = mapView.inspectCell(snap.store, cell);
   const pct = progressPercent(info.rec);
-  $('#tileProgressBar').style.width = `${pct}%`;
-  $('#remainingMinutes').textContent = remainingLabel(info.rec);
-  $('#hexId').textContent = cell.slice(0, 8);
-  placeName(info.center.lat, info.center.lng).then((name) => {
-    $('#tileInfoButton').textContent = name;
-  });
+  updateAreaName();
+  updateCityTitle();
+  updateCountdown(info.rec);
   if (toastOnSelect) {
     if (info.status === 'unlocked') toast('This tile is already part of your story.');
     else if (info.status === 'activated')
@@ -133,17 +181,37 @@ function renderHud() {
   const snap = engine.getSnapshot();
   const rec = snap.store.tiles[selectedCell];
   const coverage = snap.coverage;
-  $('#unlockedCount').textContent = snap.unlockedCount;
-  $('#coveragePercent').textContent = `${coverage}%`;
-  $('#coverageBar').style.width = `${coverage}%`;
-  $('#todayProgress').textContent = `${coverage}%`;
-  $('#streakCount').textContent = snap.streakDays;
+  const unlockedEl = $('#unlockedCount');
+  if (unlockedEl) unlockedEl.textContent = snap.unlockedCount;
+  const covEl = $('#coveragePercent');
+  if (covEl) covEl.textContent = `${coverage}%`;
+  const covBar = $('#coverageBar');
+  if (covBar) covBar.style.width = `${coverage}%`;
+  const todayEl = $('#todayProgress');
+  if (todayEl) todayEl.textContent = `${coverage}%`;
+  const streakEl = $('#streakCount');
+  if (streakEl) streakEl.textContent = snap.streakDays;
   const activityCountEl = $('#activityCount');
   if (activityCountEl) activityCountEl.textContent = `${snap.activities.length} activities`;
-  $('#tileProgressBar').style.width = `${progressPercent(rec)}%`;
-  $('#remainingMinutes').textContent = remainingLabel(rec);
-  $('#youTiles').textContent = `${snap.unlockedCount} tiles`;
-  $('#outingBadge').hidden = !snap.outing;
+  const youTilesEl = $('#youTiles');
+  if (youTilesEl) youTilesEl.textContent = `${snap.unlockedCount} tiles`;
+  const outingBadge = $('#outingBadge');
+  if (outingBadge) outingBadge.hidden = !snap.outing;
+  // Summary card live fields
+  const tilesChip = $('#tilesUnlockedCount');
+  if (tilesChip) tilesChip.textContent = String(snap.unlockedCount);
+  const areasChip = $('#areasUnlockedCount');
+  if (areasChip) {
+    try {
+      const { areaStats } = areasDbg.getRollup(snap.store);
+      let unlockedAreas = 0;
+      for (const s of areaStats.values()) if (s.status === 'unlocked' || s.status === 'mastered') unlockedAreas += 1;
+      areasChip.textContent = String(unlockedAreas);
+    } catch { areasChip.textContent = '0'; }
+  }
+  updateCityTitle();
+  updateAreaName();
+  updateCountdown(rec);
   mapView.paint(snap.store);
 }
 
@@ -164,7 +232,6 @@ function startWatch() {
     (pos) => {
       const fix = smoothFix(pos.coords);
       if (!fix) return;
-      $('#signalLabel').textContent = fix.weak ? 'GPS weak — dwell paused' : 'Live GPS';
       applyPosition(fix.lat, fix.lng, { fly: false });
       engine.setBase(fix.lat, fix.lng);
       // Real travel across regions: packs follow the base (sandbox excluded —
@@ -173,7 +240,6 @@ function startWatch() {
     },
     () => {
       toast('Location permission denied. Simulator still walks real tiles.');
-      $('#signalLabel').textContent = 'GPS unavailable';
     },
     { enableHighAccuracy: true, maximumAge: 4000, timeout: 12000 },
   );
@@ -188,7 +254,8 @@ function setTracking(on) {
   tracking = on;
   $('#trackingButton').classList.toggle('live', tracking);
   $('#trackingButton').setAttribute('aria-pressed', String(tracking));
-  $('#trackingLabel').textContent = tracking ? 'Fog clearing on' : 'Fog clearing off';
+  const tl = $('#trackingLabel');
+  if (tl) tl.textContent = tracking ? 'Fog clearing on' : 'Fog clearing off';
   if (tracking) {
     lastDwellAt = performance.now();
     startWatch();
@@ -234,7 +301,9 @@ function bindUi() {
     mapView.recenter();
     toast('Centered on your current tile.');
   });
-  $('#tileInfoButton').addEventListener('click', (e) => {
+  // My City area name is informational — keep toast on tap for debug, guard missing el.
+  const tileInfoBtn = $('#tileInfoButton') || $('#areaName');
+  tileInfoBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
     const snap = engine.getSnapshot();
     const info = mapView.inspectCell(snap.store, selectedCell);
@@ -352,6 +421,7 @@ async function switchRegion(next) {
     areasDbg.setRegion(next);
     await areasDbg.loadCore();
     activeRegion = next;
+    updateCityTitle();
     mapView.paint(engine.getSnapshot().store);
     selectCell(mapView.cellUnderUser());
     const credit = $('#dataCredit');

@@ -316,16 +316,94 @@ button {
 }
 
 .territory-title {
-  margin: 0 0 6px;
+  margin: 0;
   font: 600 17px Fraunces, serif;
 }
 
-.hex-meta {
-  margin: 0 0 12px;
-  color: #667874;
-  font: 500 10px "DM Mono", monospace;
+/* My City header: title left, counts right */
+.city-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
 }
 
+.header-counts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.count-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--navy);
+  font: 700 11px "DM Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.count-chip svg {
+  display: block;
+  flex: none;
+}
+
+.count-chip b {
+  font-weight: 800;
+}
+
+.area-name {
+  margin: 0 0 10px;
+  color: #667874;
+  font: 600 12px Manrope, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.countdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: #667874;
+  margin-bottom: 8px;
+}
+
+.countdown-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.countdown-text b {
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+
+.countdown-row.unlocked .countdown-text {
+  color: #1f8a4c;
+  font-weight: 800;
+}
+
+.lock-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--navy);
+}
+
+.lock-icon svg {
+  display: block;
+}
+
+.countdown-row.unlocked .lock-icon {
+  color: #1f8a4c;
+}
+
+/* Legacy progress-row kept for expanded detail blocks (not the summary card) */
 .progress-row {
   display: flex;
   justify-content: space-between;
@@ -349,6 +427,10 @@ button {
   border-radius: inherit;
   background: var(--deep-mint);
   transition: width 0.5s ease;
+}
+
+.progress-track.unlocked span {
+  background: #5cc581;
 }
 
 .user-puck {
