@@ -115,6 +115,9 @@ function emptyStore() {
     activities: [],
     streakDays: 0,
     lastActiveDate: null,
+    // Mutation revision: bumped on every tile change. The rollup memo in
+    // areas.js recomputes only when this moves (pan/zoom paints reuse).
+    rev: 0,
     outing: null,
     baseCell: cellAt(CONFIG.defaultCenter[1], CONFIG.defaultCenter[0]),
     // Cloud outbox: per-cell deltas not yet pushed (cleared only after the
@@ -252,6 +255,9 @@ export function createEngine() {
       p.boost += appliedBoost;
     }
     const unlockedNow = maybeUnlock(rec);
+    if (dwellMs > 0 || appliedBoost > 0 || unlockedNow) {
+      store.rev = (store.rev || 0) + 1;
+    }
     if (!sandboxMode) {
       if (store.outing) {
         if (!store.outing.touched.includes(cell)) store.outing.touched.push(cell);
@@ -315,6 +321,7 @@ export function createEngine() {
         }
       }
       store.sandbox = {};
+      store.rev = (store.rev || 0) + 1;
       emit();
       return true;
     },
@@ -376,6 +383,7 @@ export function createEngine() {
         if (!next[cell]) next[cell] = rec;
       }
       store.tiles = next;
+      store.rev = (store.rev || 0) + 1;
       emit();
     },
     // Merge pulled activities by id (append-only upstream: no conflicts).

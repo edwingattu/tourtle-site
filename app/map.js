@@ -340,8 +340,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       paintHexFog(store, { reveal: true });
       return;
     }
-    const areaStats = areas.computeAreaStats(store);
-    const rollup = band === 'area' ? null : areas.computeRollup(store, areaStats);
+    const { areaStats, rollup: fullRollup } = areas.getRollup(store);
+    const rollup = band === 'area' ? null : fullRollup;
     let items;
     let stats;
     let labels;
@@ -460,7 +460,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     if (areas.levelReady('area')) areas.buildAreaHexes();
     const band = bandForZoom(map.getZoom());
     if (band === 'street') {
-      const areaStats = areas.levelReady('area') ? areas.computeAreaStats(store) : null;
+      const areaStats = areas.levelReady('area') ? areas.getRollup(store).areaStats : null;
       // Street base = H9 hex fog with full per-hex exploration; ward
       // fills + labels overlay it for orientation (no ward borders).
       paintHexFog(store, { forceRes9: true, reveal: true });
@@ -806,7 +806,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         const neighborSet = unlockedNeighborSet(store);
         let status = tileStatus(cell, store, neighborSet);
         if (status === 'unclaimed' && areas.levelReady('area')) {
-          const areaStats = areas.computeAreaStats(store);
+          const areaStats = areas.getRollup(store).areaStats;
           const aid = areas.areaOfHex(cell);
           if (aid && areaStats.get(aid)?.status !== 'unclaimed') status = 'activated';
         }

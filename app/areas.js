@@ -14,6 +14,9 @@ import { cellCenter, cellsForPolygon, isUnlocked } from './engine.js';
  */
 const packs = { meta: null, areas: null, districts: null, states: null, countries: null };
 let loading = {};
+// Bumped on every pack load; part of the rollup memo key so lazily-loaded
+// upper packs invalidate the cache (fresh districts must roll up immediately).
+let packsEpoch = 0;
 
 // ---- Regions: per-city area/district/meta packs; states+countries global.
 // Only the active region's packs are ever fetched (lazy per-region load).
@@ -35,6 +38,9 @@ const REGIONS = {
 };
 const REGION_KEY = 'tourtle.v0.region';
 let region = 'hyd';
+// Retained per-region state: packs + derived caches survive switches, so
+// returning is instant (states/countries stay global, shared across regions).
+const retained = {};
 
 export function getRegion() {
   return region;
@@ -55,7 +61,9 @@ export function regionForPoint(lat, lng) {
   return 'hyd';
 }
 
-/** Switch region, dropping cached packs/geometry. Returns true if changed. */
+/** Switch region, keeping the old region's packs + derived caches resident.
+ * Switching back is synchronous: no fetch, no raster rebuild, no empty map.
+ * Returns true if changed. */
 export function setRegion(next, { persist = false } = {}) {
   if (!REGIONS[next]) next = 'hyd';
   if (persist) {
@@ -66,14 +74,38 @@ export function setRegion(next, { persist = false } = {}) {
     }
   }
   if (next === region && packs.meta) return false;
+  if (packs.meta) {
+    retained[region] = {
+      packs: { meta: packs.meta, areas: packs.areas, districts: packs.districts },
+      cityDistricts: cityDistrictCache,
+      cityItem: cityItemCache,
+      hexToArea,
+      areaHexMembers,
+      hexRasterBuilt,
+      rollup: rollupCache,
+    };
+  }
   region = next;
-  packs.meta = packs.areas = packs.districts = null;
-  loading = {};
-  cityDistrictCache = null;
-  cityItemCache = null;
-  hexToArea = new Map();
-  areaHexMembers = new Map();
-  hexRasterBuilt = false;
+  const hit = retained[next];
+  if (hit) {
+    packs.meta = hit.packs.meta;
+    packs.areas = hit.packs.areas;
+    packs.districts = hit.packs.districts;
+    cityDistrictCache = hit.cityDistricts;
+    cityItemCache = hit.cityItem;
+    hexToArea = hit.hexToArea;
+    areaHexMembers = hit.areaHexMembers;
+    hexRasterBuilt = hit.hexRasterBuilt;
+    rollupCache = hit.rollup;
+  } else {
+    packs.meta = packs.areas = packs.districts = null;
+    cityDistrictCache = null;
+    cityItemCache = null;
+    hexToArea = new Map();
+    areaHexMembers = new Map();
+    hexRasterBuilt = false;
+    rollupCache = null;
+  }
   return true;
 }
 
@@ -102,6 +134,7 @@ export async function loadCore() {
     ]);
     packs.meta = meta;
     packs.areas = areas;
+    packsEpoch += 1;
   }
   return packs.meta;
 }
@@ -124,16 +157,19 @@ export function ensureLevel(level) {
   const need = (LEVEL_PACKS[level] || []).filter((n) => !packs[n]);
   if (!need.length) return Promise.resolve(false);
   const jobs = need.map((n) => {
-    if (!loading[n]) {
-      loading[n] = fetch(packUrl(n))
+    // In-flight fetches are keyed per region (both cities share pack names).
+    const key = `${region}:${n}`;
+    if (!loading[key]) {
+      loading[key] = fetch(packUrl(n))
         .then((r) => r.json())
         .then((j) => {
           packs[n] = j;
+          packsEpoch += 1;
           return true;
         })
         .catch(() => false);
     }
-    return loading[n];
+    return loading[key];
   });
   return Promise.all(jobs).then((rs) => rs.some(Boolean));
 }
@@ -331,6 +367,21 @@ function rollupChildren(childIds, childStats) {
   const total = childIds.length;
   // Rollup levels never master — unlocked is their terminal state.
   return { total, unlocked, active, status: decideStatus(total, unlocked, active, false) };
+}
+
+// Rollup memo: recompute only when the store revision moves. Pan/zoom
+// paints with untouched tiles reuse the cached result — this is what makes
+// zoom-outs free after the first computation.
+let rollupCache = null;
+export function getRollup(store) {
+  const rev = store.rev || 0;
+  if (rollupCache && rollupCache.rev === rev && rollupCache.epoch === packsEpoch) {
+    return rollupCache;
+  }
+  const areaStats = computeAreaStats(store);
+  const rollup = computeRollup(store, areaStats);
+  rollupCache = { rev, epoch: packsEpoch, areaStats, rollup };
+  return rollupCache;
 }
 
 /** Full hierarchy rollup. Districts/states without children stay unclaimed. */
