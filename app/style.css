@@ -256,11 +256,25 @@ button {
   overflow: hidden;
 }
 
+.card-handle {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 0;
+  flex: none;
+}
+
+.card-handle span {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: #d9e2ee;
+}
+
 .map-summary {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 16px 17px;
+  padding: 8px 17px 0;
   cursor: pointer;
   flex: none;
 }
@@ -268,23 +282,6 @@ button {
 .summary-text {
   flex: 1;
   min-width: 0;
-}
-
-.expand-icon {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--navy);
-  color: white;
-  margin-top: 2px;
-  transition: transform 0.25s ease;
-}
-
-.bottom-card.expanded .expand-icon {
-  transform: rotate(180deg);
 }
 
 .detail-content {
@@ -320,13 +317,17 @@ button {
   font: 600 17px Fraunces, serif;
 }
 
-/* My City header: title left, counts right */
+/* My City header: title left, counts flush right */
 .city-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 4px;
+}
+
+.city-header .header-counts {
+  margin-left: auto;
 }
 
 .header-counts {
@@ -503,6 +504,13 @@ button {
   border-radius: 999px;
   overflow: hidden;
   position: relative;
+}
+
+#tileProgressTrack {
+  margin: 10px -17px 0 -17px;
+  width: calc(100% + 34px);
+  border-radius: 0 0 18px 18px;
+  height: 6px;
 }
 
 .progress-track span {
