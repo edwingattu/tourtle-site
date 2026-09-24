@@ -585,8 +585,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // Hex base MUST be added before every polygon layer: insertion order
     // is paint order, so this keeps hexes under all fills and labels.
     // Seamless fill, antialias off, no seams. Locked blue-tinted dark grey,
-    // activated the same grey 20% toward white, plus the blue hairline from
-    // hex-active-borders below. Unlocked is clear.
+    // activated the same grey 20% toward white. Unlocked is clear.
     map.addLayer({
       id: 'hex-fills',
       type: 'fill',
@@ -610,19 +609,6 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           0.62,
         ],
         'fill-opacity-transition': { duration: 300, delay: 0 },
-      },
-    });
-    // Activated-hex border: a true line layer over the shared grey fill —
-    // no fill of its own, so nothing double-draws. Filtered to activated
-    // so locked hexes stay borderless.
-    map.addLayer({
-      id: 'hex-active-borders',
-      type: 'line',
-      source: 'hex-fog',
-      filter: ['==', ['get', 'status'], 'activated'],
-      paint: {
-        'line-color': '#8fd0f2',
-        'line-width': 3,
       },
     });
     // Area labels overlay the street hexes for orientation (their window
