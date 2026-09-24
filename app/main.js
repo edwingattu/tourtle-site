@@ -103,29 +103,17 @@ function updateCityTitle() {
   el.textContent = `My ${label}`;
 }
 
-function updateOverall() {
+function updateAreaName() {
   const el = $('#areaName');
+  const hexEl = $('#hexLine');
   if (!el) return;
   const { lng, lat } = mapView ? mapView.getUserLocation() : { lng: CONFIG.defaultCenter[0], lat: CONFIG.defaultCenter[1] };
   const area = areasDbg.areaAt(lng, lat) || areasDbg.districtAt(lng, lat);
   el.textContent = area ? area.name : 'Outside mapped areas';
-}
-
-function updateCurrentTile(cell) {
-  const tileEl = $('#tileName');
-  const hexEl = $('#hexLine');
-  const target = cell || selectedCell;
-  if (!target) return;
-  const center = cellCenter(target);
-  const area = areasDbg.areaAt(center.lng, center.lat) || areasDbg.districtAt(center.lng, center.lat);
-  if (tileEl) tileEl.textContent = area ? area.name : 'Outside mapped areas';
-  if (hexEl) hexEl.textContent = `H3 · ${target}`;
-}
-
-// Backwards compat wrapper
-function updateAreaName() {
-  updateOverall();
-  updateCurrentTile(selectedCell);
+  if (hexEl) {
+    const cell = cellAt(lat, lng);
+    hexEl.textContent = `H3 · ${cell}`;
+  }
 }
 
 function updateCountdown(rec) {
@@ -185,8 +173,7 @@ function selectCell(cell, { toastOnSelect = false } = {}) {
   mapView.paint(snap.store);
   const info = mapView.inspectCell(snap.store, cell);
   const pct = progressPercent(info.rec);
-  updateOverall();
-  updateCurrentTile(cell);
+  updateAreaName();
   updateCityTitle();
   updateCountdown(info.rec);
   if (toastOnSelect) {
@@ -243,8 +230,7 @@ function renderHud() {
     }
   }
   updateCityTitle();
-  updateOverall();
-  updateCurrentTile(selectedCell);
+  updateAreaName();
   updateCountdown(rec);
   mapView.paint(snap.store);
 }
