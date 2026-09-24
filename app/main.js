@@ -21,6 +21,8 @@ const session = await requireSessionOrRedirect();
 const currentUser = session.user;
 
 const engine = createEngine();
+// Debug hook early: available even while auth/map/sync are still loading.
+exposeDebug(window, engine);
 const mapView = createMap({
   onHexSelect: (cell) => selectCell(cell, { toastOnSelect: true }),
   onMove: () => mapView.paint(engine.getSnapshot().store),
@@ -374,7 +376,6 @@ if (activeRegion !== 'nyc') {
 // Cloud bootstrap (silent-local on failure): seed local history, push it up,
 // pull canonical state — then repaint from merged totals.
 await bootstrap(engine);
-exposeDebug(window, engine);
 {
   // Diagnostic snapshot: pack loadout + lookup sanity at map center.
   const c = mapView.map.getCenter();

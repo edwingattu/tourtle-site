@@ -1,5 +1,6 @@
 import { supabase } from './auth.js';
 import { CONFIG } from './config.js';
+import { buildAreaHexes, getPack, getRegion, getRollup } from './areas.js';
 
 // Cloud sync: offline-first, delta-additive merge.
 // - localStorage stays the fast local cache; Supabase is source of truth.
@@ -177,6 +178,38 @@ export function exposeDebug(target, engine) {
       pullAll: () => pullAll(engine),
       pending: () => engine.getPending(),
       store: () => engine.getSnapshot().store,
+      // Truth-teller for "tiles not lighting up": pack loadout + status
+      // distribution per level + every non-unclaimed tile by name.
+      diag: () => {
+        buildAreaHexes();
+        const snap = engine.getSnapshot();
+        const { areaStats, rollup } = getRollup(snap.store);
+        const dist = (m) => {
+          const o = {};
+          for (const s of m.values()) o[s.status] = (o[s.status] || 0) + 1;
+          return o;
+        };
+        const live = (items, stats) =>
+          (items || [])
+            .filter((it) => (stats.get(it.id)?.status || 'unclaimed') !== 'unclaimed')
+            .map((it) => `${it.name}:${stats.get(it.id).status}`);
+        return {
+          region: getRegion(),
+          packs: {
+            areas: getPack('areas')?.length || 0,
+            districts: getPack('districts')?.length || 0,
+            states: getPack('states')?.length || 0,
+            countries: getPack('countries')?.length || 0,
+          },
+          hexes: Object.keys(snap.store.tiles).length,
+          areaStats: dist(areaStats),
+          city: rollup.city,
+          liveAreas: live(getPack('areas'), areaStats).slice(0, 12),
+          liveDistricts: live(getPack('districts'), rollup.districts).slice(0, 12),
+          liveStates: live(getPack('states'), rollup.states),
+          liveCountries: live(getPack('countries'), rollup.countries),
+        };
+      },
     };
   } catch {
     /* non-browser */
