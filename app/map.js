@@ -585,7 +585,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // Hex base MUST be added before every polygon layer: insertion order
     // is paint order, so this keeps hexes under all fills and labels.
     // Seamless fill, antialias off, no seams. Locked blue-tinted dark grey,
-    // activated light blue-grey with the blue hairline from
+    // activated the same grey 20% toward white, plus the blue hairline from
     // hex-active-borders below. Unlocked is clear.
     map.addLayer({
       id: 'hex-fills',
@@ -599,7 +599,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'unlocked',
           'rgba(0,0,0,0)',
           'activated',
-          '#9fb9cf',
+          '#616f7e',
           '#3a4b5e',
         ],
         'fill-opacity': [
