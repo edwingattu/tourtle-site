@@ -510,13 +510,14 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       // (area-edges source retired: ward outlines now come from area-tiles.)
 
     // Polygon states: unclaimed draws borders only (hexes are the fill);
-    // activated fills hex-blue, unlocked fills green at the same opacity,
-    // mastered (areas only) fills gold.
+    // activated fills light sky-blue, unlocked fills green at the same
+    // opacity, mastered (areas only) fills gold. Live fills get a white
+    // hairline (unclaimed opacity is 0, so its outline stays invisible).
     const TILE_FILL_COLOR = [
       'match',
       ['get', 'status'],
       'activated',
-      '#5eb0e5',
+      '#8fd0f2',
       'unlocked',
       '#5cc581',
       'mastered',
@@ -597,7 +598,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'unlocked',
           'rgba(0,0,0,0)',
           'activated',
-          '#5eb0e5',
+          '#8fd0f2',
           '#3a4b5e',
         ],
         'fill-opacity': [
@@ -650,6 +651,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           paint: {
             'fill-color': TILE_FILL_COLOR,
             'fill-opacity': LIVE_FILL,
+            'fill-outline-color': '#ffffff',
             'fill-opacity-transition': { duration: 300, delay: 0 },
           },
         });
@@ -666,6 +668,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           paint: {
             'fill-color': TILE_FILL_COLOR,
             'fill-opacity': TILE_FILL_OPACITY,
+            'fill-outline-color': '#ffffff',
             'fill-opacity-transition': { duration: 300, delay: 0 },
           },
         });
