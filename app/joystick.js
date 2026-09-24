@@ -1,4 +1,5 @@
 import { cellAt } from './engine.js';
+import { regionLabel } from './areas.js';
 
 // Sandbox joystick (diagnostics): a floating nub that walks the user pointer
 // around the map. Enabling flips the engine into sandbox mode and drops the
@@ -18,7 +19,12 @@ export function setupJoystick({ mapView, engine, selectCell, toast, getRegion, s
   const pad = document.getElementById('joystick');
   const base = pad?.querySelector('.joy-base');
   const nub = pad?.querySelector('.joy-nub');
+  const tag = pad?.querySelector('.joy-tag');
   if (!btn || !pad || !base || !nub) return { isActive: () => false };
+
+  function setTag(text) {
+    if (tag) tag.textContent = text;
+  }
 
   let active = false;
   let vec = { x: 0, y: 0 };
@@ -65,6 +71,7 @@ export function setupJoystick({ mapView, engine, selectCell, toast, getRegion, s
     // the pointer, restored on disable.
     prevRegion = getRegion?.() || 'hyd';
     await switchRegion?.('nyc');
+    setTag(`sandbox · ${regionLabel('nyc')} · never syncs`);
     mapView.setUserLocation(NYC.lng, NYC.lat);
     mapView.map.easeTo({
       center: [NYC.lng, NYC.lat],
@@ -85,8 +92,10 @@ export function setupJoystick({ mapView, engine, selectCell, toast, getRegion, s
     btn.classList.remove('active');
     btn.setAttribute('aria-pressed', 'false');
     pad.hidden = true;
-    await switchRegion?.(prevRegion || 'hyd');
-    toast?.('Sandbox cleared — temporary exploration removed.');
+    const home = prevRegion || 'hyd';
+    await switchRegion?.(home);
+    setTag('sandbox · never syncs');
+    toast?.(`Sandbox cleared — back in ${regionLabel(home)}, packs restored.`);
   }
 
   btn.addEventListener('click', () => (active ? disable() : enable()));

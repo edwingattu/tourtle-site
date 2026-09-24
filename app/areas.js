@@ -23,6 +23,7 @@ let packsEpoch = 0;
 const REGIONS = {
   hyd: {
     dir: '',
+    label: 'Hyderabad',
     bbox: [77.0, 16.8, 79.0, 18.2],
     center: [78.4867, 17.4375],
     credit:
@@ -30,6 +31,7 @@ const REGIONS = {
   },
   nyc: {
     dir: 'nyc/',
+    label: 'New York',
     bbox: [-74.6, 40.3, -73.4, 41.0],
     center: [-73.9855, 40.758],
     credit:
@@ -48,6 +50,10 @@ export function getRegion() {
 
 export function regionCredit() {
   return REGIONS[region].credit;
+}
+
+export function regionLabel(r = region) {
+  return (REGIONS[r] || REGIONS.hyd).label;
 }
 
 export function regionCenter() {
