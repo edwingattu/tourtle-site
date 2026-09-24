@@ -33,12 +33,13 @@ export function setupJoystick({ mapView, engine, selectCell, toast }) {
   function step() {
     if (Math.hypot(vec.x, vec.y) < DEADZONE) return;
     const map = mapView.map;
-    const el = map.getContainer();
-    const ll = map.unproject([
-      el.clientWidth / 2 + vec.x * STEP_PX,
-      el.clientHeight / 2 + vec.y * STEP_PX,
-    ]);
+    // Advance from the marker's own position (not a fixed screen point) and
+    // carry the camera with it — motion continues until the nub is released.
+    const cur = mapView.getUserLocation();
+    const pt = map.project([cur.lng, cur.lat]);
+    const ll = map.unproject([pt.x + vec.x * STEP_PX, pt.y + vec.y * STEP_PX]);
     mapView.setUserLocation(ll.lng, ll.lat);
+    map.jumpTo({ center: [ll.lng, ll.lat] });
     const cell = cellAt(ll.lat, ll.lng);
     engine.dwell(cell, STEP_MS);
     // Refresh the summary panel on new cells, throttled (each select can
