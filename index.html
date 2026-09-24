@@ -45,14 +45,23 @@
             <div class="city-header">
               <h3 class="territory-title" id="cityTitle">My Hyderabad</h3>
               <div class="header-counts">
-                <span class="count-chip" id="areasUnlockedChip" aria-label="Areas unlocked">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-                  <b id="areasUnlockedCount">0</b>
-                </span>
-                <span class="count-chip" id="tilesUnlockedChip" aria-label="Tiles unlocked">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l7 4v8l-7 4-7-4V7z"/><path d="M12 11V21"/></svg>
-                  <b id="tilesUnlockedCount">0</b>
-                </span>
+                <div class="count-group" aria-label="Areas">
+                  <div class="count-boxes">
+                    <div class="count-box activated" id="areasActivatedBox" aria-label="Activated areas">
+                      <b id="areasActivatedCount">0</b><span class="box-dot blue" aria-hidden="true"></span>
+                    </div>
+                    <div class="count-box unlocked" id="areasUnlockedBox" aria-label="Unlocked areas">
+                      <b id="areasUnlockedCount">0</b><span class="box-dot green" aria-hidden="true"></span>
+                    </div>
+                  </div>
+                  <span class="count-label">Areas</span>
+                </div>
+                <div class="count-group" aria-label="Tiles">
+                  <div class="count-box neutral" id="tilesUnlockedBox" aria-label="Tiles unlocked">
+                    <b id="tilesUnlockedCount">0</b>
+                  </div>
+                  <span class="count-label">Tiles</span>
+                </div>
               </div>
             </div>
             <p class="area-name" id="areaName">Locating area…</p>

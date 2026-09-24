@@ -197,17 +197,26 @@ function renderHud() {
   if (youTilesEl) youTilesEl.textContent = `${snap.unlockedCount} tiles`;
   const outingBadge = $('#outingBadge');
   if (outingBadge) outingBadge.hidden = !snap.outing;
-  // Summary card live fields
+  // Summary card live fields — Areas: 2 boxes (activated blue + unlocked green), Tiles: unlocked only
   const tilesChip = $('#tilesUnlockedCount');
   if (tilesChip) tilesChip.textContent = String(snap.unlockedCount);
-  const areasChip = $('#areasUnlockedCount');
-  if (areasChip) {
+  const areasActEl = $('#areasActivatedCount');
+  const areasUnlEl = $('#areasUnlockedCount');
+  if (areasActEl || areasUnlEl) {
     try {
       const { areaStats } = areasDbg.getRollup(snap.store);
+      let activatedAreas = 0;
       let unlockedAreas = 0;
-      for (const s of areaStats.values()) if (s.status === 'unlocked' || s.status === 'mastered') unlockedAreas += 1;
-      areasChip.textContent = String(unlockedAreas);
-    } catch { areasChip.textContent = '0'; }
+      for (const s of areaStats.values()) {
+        if (s.status === 'activated') activatedAreas += 1;
+        else if (s.status === 'unlocked' || s.status === 'mastered') unlockedAreas += 1;
+      }
+      if (areasActEl) areasActEl.textContent = String(activatedAreas);
+      if (areasUnlEl) areasUnlEl.textContent = String(unlockedAreas);
+    } catch {
+      if (areasActEl) areasActEl.textContent = '0';
+      if (areasUnlEl) areasUnlEl.textContent = '0';
+    }
   }
   updateCityTitle();
   updateAreaName();

@@ -331,27 +331,76 @@ button {
 
 .header-counts {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-end;
+  gap: 12px;
   flex: none;
 }
 
-.count-chip {
-  display: inline-flex;
+.count-group {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 4px;
-  color: var(--navy);
-  font: 700 11px "DM Mono", monospace;
+}
+
+.count-boxes {
+  display: flex;
+  gap: 6px;
+}
+
+.count-box {
+  position: relative;
+  min-width: 38px;
+  height: 34px;
+  padding: 0 10px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  font: 800 15px "DM Mono", monospace;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(16, 46, 74, 0.06);
 }
 
-.count-chip svg {
-  display: block;
-  flex: none;
+.count-box.activated b {
+  color: #2a69aa;
 }
 
-.count-chip b {
-  font-weight: 800;
+.count-box.unlocked b {
+  color: #1f8a4c;
+}
+
+.count-box.neutral b {
+  color: var(--navy);
+}
+
+.box-dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid rgba(248, 247, 242, 0.94);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.04);
+}
+
+.box-dot.blue {
+  background: #2a69aa;
+}
+
+.box-dot.green {
+  background: #1f8a4c;
+}
+
+.count-label {
+  font: 600 9px "DM Mono", monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6e8278;
+  line-height: 1;
 }
 
 .area-name {
