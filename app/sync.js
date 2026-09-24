@@ -1,6 +1,7 @@
 import { supabase } from './auth.js';
 import { CONFIG } from './config.js';
 import { buildAreaHexes, getPack, getRegion, getRollup } from './areas.js';
+import { myRole } from './roles.js';
 
 // Cloud sync: offline-first, delta-additive merge.
 // - localStorage stays the fast local cache; Supabase is source of truth.
@@ -178,6 +179,7 @@ export function exposeDebug(target, engine) {
       pullAll: () => pullAll(engine),
       pending: () => engine.getPending(),
       store: () => engine.getSnapshot().store,
+      role: () => myRole(),
       // Truth-teller for "tiles not lighting up": pack loadout + status
       // distribution per level + every non-unclaimed tile by name.
       diag: () => {

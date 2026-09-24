@@ -12,6 +12,7 @@ import { bootstrap, exposeDebug, flush } from './sync.js';
 import { setupJoystick } from './joystick.js';
 import { regionCenter, regionCredit, regionForPoint, savedRegion, setRegion } from './areas.js';
 import * as areasDbg from './areas.js';
+import { isAdmin } from './roles.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -19,6 +20,11 @@ const $ = (sel) => document.querySelector(sel);
 // Throws/redirects when signed out, so nothing below runs without a user.
 const session = await requireSessionOrRedirect();
 const currentUser = session.user;
+
+// Role gate: sandbox + diagnostics exist only for admin rung and up.
+// Everyone else gets the fixed live build (button never enters the DOM).
+const adminUser = await isAdmin();
+if (!adminUser) $('#joystickButton')?.remove();
 
 const engine = createEngine();
 // Debug hook early: available even while auth/map/sync are still loading.
@@ -398,6 +404,7 @@ setupJoystick({
   toast,
   getRegion: areasDbg.getRegion,
   switchRegion,
+  enabled: adminUser,
 });
 {
   const credit = $('#dataCredit');

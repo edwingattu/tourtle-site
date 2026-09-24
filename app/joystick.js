@@ -14,7 +14,9 @@ const STEP_MS = 120;
 const DEADZONE = 0.15;
 const SELECT_THROTTLE_MS = 2000;
 
-export function setupJoystick({ mapView, engine, selectCell, toast, getRegion, switchRegion }) {
+export function setupJoystick({ mapView, engine, selectCell, toast, getRegion, switchRegion, enabled = true }) {
+  // Non-admin: no button, no pad, no sandbox — fixed live build.
+  if (!enabled) return { isActive: () => false };
   const btn = document.getElementById('joystickButton');
   const pad = document.getElementById('joystick');
   const base = pad?.querySelector('.joy-base');
