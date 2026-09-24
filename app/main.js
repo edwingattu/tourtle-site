@@ -11,6 +11,7 @@ import { createMap } from './map.js';
 import { bootstrap, exposeDebug, flush } from './sync.js';
 import { setupJoystick } from './joystick.js';
 import { regionCenter, regionCredit, regionForPoint, savedRegion, setRegion } from './areas.js';
+import * as areasDbg from './areas.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -326,6 +327,7 @@ let activeRegion = 'hyd';
   const base = cellCenter(engine.getSnapshot().store.baseCell);
   activeRegion = explicit || savedRegion() || regionForPoint(base.lat, base.lng);
   setRegion(activeRegion, { persist: !!explicit });
+  console.log(`[region] active=${activeRegion} explicit=${explicit} saved=${savedRegion()}`);
 }
 await mapView.ready();
 if (activeRegion === 'nyc') {
@@ -342,6 +344,19 @@ if (activeRegion !== 'nyc') {
 // pull canonical state — then repaint from merged totals.
 await bootstrap(engine);
 exposeDebug(window, engine);
+{
+  // Diagnostic snapshot: pack loadout + lookup sanity at map center.
+  const c = mapView.map.getCenter();
+  const nAreas = areasDbg.getPack('areas')?.length || 0;
+  const nDistricts = areasDbg.getPack('districts')?.length || 0;
+  const area = areasDbg.areaAt(c.lng, c.lat);
+  const dist = areasDbg.districtAt(c.lng, c.lat);
+  console.log(
+    `[region] packs areas=${nAreas} districts=${nDistricts} ` +
+      `zoom=${mapView.map.getZoom().toFixed(2)} center=${c.lng.toFixed(3)},${c.lat.toFixed(3)} ` +
+      `area=${area?.id || 'none'} district=${dist?.id || 'none'}`,
+  );
+}
 selectCell(mapView.cellUnderUser());
 bindUi();
 setupJoystick({ mapView, engine, selectCell, toast });

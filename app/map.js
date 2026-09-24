@@ -437,6 +437,24 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
   }
 
   function doPaint(store) {
+    try {
+      doPaintInner(store);
+    } catch (err) {
+      // Diagnostic tripwire: a silent paint death looks exactly like "tiles
+      // don't light up". Name it loudly instead.
+      console.error('[paint] failed:', err?.message || err, err?.stack);
+      if (!window.__paintErrorShown) {
+        window.__paintErrorShown = true;
+        const t = document.getElementById('toast');
+        if (t) {
+          t.textContent = `Paint error: ${err?.message || err}`;
+          t.classList.add('visible');
+        }
+      }
+    }
+  }
+
+  function doPaintInner(store) {
     lastStoreRef = store;
     if (store.baseCell) ensureCityCache(store.baseCell);
     if (areas.levelReady('area')) areas.buildAreaHexes();
