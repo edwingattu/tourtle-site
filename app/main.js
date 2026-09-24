@@ -22,9 +22,12 @@ const session = await requireSessionOrRedirect();
 const currentUser = session.user;
 
 // Role gate: sandbox + diagnostics exist only for admin rung and up.
-// Everyone else gets the fixed live build (button never enters the DOM).
+// Everyone else gets the fixed live build (diagnostic elements removed).
 const adminUser = await isAdmin();
-if (!adminUser) $('#joystickButton')?.remove();
+if (!adminUser) {
+  $('#joystickButton')?.remove();
+  $('#zoomLevel')?.remove();
+}
 
 const engine = createEngine();
 // Debug hook early: available even while auth/map/sync are still loading.
