@@ -39,7 +39,7 @@ if (!adminUser) {
   $('#tiltLevel')?.remove();
 }
 
-const engine = createEngine();
+const engine = createEngine(currentUser?.id || null);
 // Debug hook early: available even while auth/map/sync are still loading.
 exposeDebug(window, engine);
 const mapView = createMap({

@@ -1,7 +1,13 @@
 import * as h3 from 'https://esm.sh/h3-js@4.5.0';
 import { CONFIG } from './config.js';
 
-const STORAGE_KEY = 'tourtle.v0.hex-progress';
+const STORAGE_PREFIX = 'tourtle.v0.hex-progress';
+// Per-user stores: localStorage is per-browser, not per-user. A shared key let
+// a second login inherit the first user's tiles + media. Namespace by uid;
+// one-time legacy move (not copy) for pre-upgrade devices.
+function storageKeyFor(userId) {
+  return userId ? `${STORAGE_PREFIX}.${userId}` : STORAGE_PREFIX;
+}
 
 export function cellAt(lat, lng, res = CONFIG.h3Resolution) {
   return h3.latLngToCell(lat, lng, res);
@@ -182,10 +188,23 @@ function bumpStreak(store) {
   store.lastActiveDate = today;
 }
 
-export function createEngine() {
+export function createEngine(userId = null) {
+  const STORAGE_KEY = storageKeyFor(userId);
   let store = emptyStore();
   try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '');
+    let raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '');
+    if ((!raw || !raw.tiles) && userId) {
+      // Adopt the pre-upgrade shared cache once, then delete it so the next
+      // login on this browser can't inherit it.
+      const legacy = JSON.parse(localStorage.getItem(STORAGE_PREFIX) || '');
+      if (legacy?.version === 1 && legacy.tiles) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(legacy));
+          localStorage.removeItem(STORAGE_PREFIX);
+        } catch {}
+        raw = legacy;
+      }
+    }
     if (raw?.version === 1 && raw.tiles) store = { ...emptyStore(), ...raw };
   } catch {
     /* first run */

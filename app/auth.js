@@ -44,6 +44,16 @@ export async function sendMagicLink(email) {
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
+  // Drop per-user cached exploration so the next login on this browser can't
+  // inherit it (device-level prefs like region/gate choice are kept).
+  try {
+    const drop = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('tourtle.v0.hex-progress')) drop.push(k);
+    }
+    drop.forEach((k) => localStorage.removeItem(k));
+  } catch {}
 }
 
 /** Call at the top of protected pages. Redirects to auth.html when signed out. */
