@@ -17,6 +17,11 @@ import { isAdmin } from './roles.js';
 
 const $ = (sel) => document.querySelector(sel);
 
+// PWA: register shell SW (network-first for HTML, offline fallback). nosw=1 bypasses for dev.
+if ('serviceWorker' in navigator && !new URLSearchParams(window.location.search).has('nosw')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
+
 // Auth gate: unauthenticated visitors go to auth.html (Google + magic link).
 // Throws/redirects when signed out, so nothing below runs without a user.
 const session = await requireSessionOrRedirect();
@@ -270,6 +275,20 @@ function stopWatch() {
   watchId = null;
 }
 
+let wakeLock = null;
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator && tracking) wakeLock = await navigator.wakeLock.request('screen');
+  } catch {}
+}
+function releaseWakeLock() {
+  try { wakeLock?.release(); } catch {}
+  wakeLock = null;
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && tracking) requestWakeLock();
+});
+
 function setTracking(on) {
   tracking = on;
   $('#trackingButton').classList.toggle('live', tracking);
@@ -279,9 +298,11 @@ function setTracking(on) {
   if (tracking) {
     lastDwellAt = performance.now();
     startWatch();
+    requestWakeLock();
     toast('Live fog clearing is on. Hexes follow your real coordinates.');
   } else {
     stopWatch();
+    releaseWakeLock();
     toast('Fog clearing paused.');
   }
 }
@@ -314,6 +335,15 @@ function bindUi() {
       e.preventDefault();
       setExpanded(!bottomCard?.classList.contains('expanded'));
     }
+  });
+
+  // PWA install prompt (deferred)
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    // subtle cue after gate: could show banner here if desired
+    console.log('[pwa] install prompt ready');
   });
 
   $('#trackingButton').addEventListener('click', () => setTracking(!tracking));
