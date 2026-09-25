@@ -14,7 +14,7 @@ import { setupJoystick } from './joystick.js';
 import { regionCenter, regionCredit, regionForPoint, savedRegion, setRegion } from './areas.js';
 import * as areasDbg from './areas.js';
 import { isAdmin, isSuperadmin } from './roles.js';
-import { compressPhoto, pickAudioMime, pickPhotoMime, pickVideoMime, uploadMedia } from './media.js';
+import { compressPhoto, flushMediaOutbox, mediaOutbox, pickAudioMime, pickPhotoMime, pickVideoMime, uploadMedia } from './media.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -386,9 +386,12 @@ function selectCell(cell, { toastOnSelect = false } = {}) {
   updateAreaName(cell);
   updateCityTitle();
   updateCountdown(info.rec);
-  // Activity dots: only for tapped mastered tiles, fading over 60s
-  if (isMasteredCell(snap.store, cell)) mapView.showTilePins(snap.store, cell);
-  else mapView.hideTilePins();
+  // Activity dots: only for tapped mastered tiles, fading over 60s.
+  // Guarded so a pins failure can never break selection/boot.
+  try {
+    if (isMasteredCell(snap.store, cell)) mapView.showTilePins(snap.store, cell);
+    else mapView.hideTilePins();
+  } catch (e) { console.warn('[pins] failed:', e?.message || e); }
   // Animate bar 0 → current on every tap (progress already reflects tile)
   const bar = document.getElementById('tileProgressBar');
   if (bar) {
@@ -613,10 +616,10 @@ function bindUi() {
     mapView.recenter();
     toast('Centered on your current tile.');
   });
-  // My City area name is informational — keep toast on tap for debug, guard missing el.
+  // Area-name tap logs debug info AND expands (no stopPropagation — swallowing
+  // the tap is what made the card feel dead when users tap the title text).
   const tileInfoBtn = $('#tileInfoButton') || $('#areaName');
-  tileInfoBtn?.addEventListener('click', (e) => {
-    e.stopPropagation();
+  tileInfoBtn?.addEventListener('click', () => {
     const snap = engine.getSnapshot();
     const info = mapView.inspectCell(snap.store, selectedCell);
     toast(`${info.status} · H3 ${info.cell} · ${progressPercent(info.rec)}% dwell`);
@@ -653,10 +656,22 @@ function bindUi() {
     }
   });
 
-  // Personalize avatar + leaderboard label from auth user.
-  const initial = (currentUser?.email || 'A').trim().charAt(0).toUpperCase() || 'A';
+  // Avatar from Google profile (full name + photo), email-initial fallback.
+  const meta = currentUser?.user_metadata || {};
+  const displayName = meta.full_name || meta.name || currentUser?.email || 'A';
   const profileBtn = $('#profileButton');
-  if (profileBtn) profileBtn.textContent = initial;
+  if (profileBtn) {
+    if (meta.avatar_url || meta.picture) {
+      const url = meta.avatar_url || meta.picture;
+      profileBtn.textContent = '';
+      profileBtn.style.backgroundImage = `url("${url}")`;
+      profileBtn.style.backgroundSize = 'cover';
+      profileBtn.style.backgroundPosition = 'center';
+      profileBtn.setAttribute('aria-label', displayName);
+    } else {
+      profileBtn.textContent = displayName.trim().charAt(0).toUpperCase() || 'A';
+    }
+  }
 
   // Inline Voice capture (card itself) + fullscreen Camera + tile gallery
   const voiceArea = $('#voiceCapture');
@@ -760,13 +775,17 @@ function bindUi() {
     const activity = engine.logActivity({ title: isVideo ? 'Video memory' : 'Photo memory', category: selectedCategory, captureType: isVideo ? 'video' : 'photo', lat, lng, cell });
     const localUrl = URL.createObjectURL(blob);
     activity.localUrl = localUrl;
+    const uid = (await import('./auth.js').then((m) => m.supabase.auth.getUser())).data.user?.id;
+    const ext = blob.type.includes('webp') ? 'webp' : blob.type.includes('mp4') ? 'mp4' : isVideo ? 'webm' : 'jpg';
+    const path = `${uid}/${activity.id}.${ext}`;
     try {
-      const uid = (await import('./auth.js').then((m) => m.supabase.auth.getUser())).data.user?.id;
-      const ext = blob.type.includes('webp') ? 'webp' : blob.type.includes('mp4') ? 'mp4' : isVideo ? 'webm' : 'jpg';
-      const url = await uploadMedia(`${uid}/${activity.id}.${ext}`, blob, blob.type);
+      const url = await uploadMedia(path, blob, blob.type);
       activity.media_url = url;
       try { localStorage.setItem('tourtle.v0.hex-progress', JSON.stringify(engine.getSnapshot().store)); } catch {}
-    } catch (e) { console.warn('[media] upload failed', e?.message || e); }
+    } catch (e) {
+      console.warn('[media] upload failed, queued for retry', e?.message || e);
+      mediaOutbox.push({ id: activity.id, path, blob });
+    }
     closeCamera(); renderTileGallery(); renderHud();
   }
   document.querySelectorAll('.cam-tab').forEach((t) => t.addEventListener('click', async () => {
@@ -948,15 +967,18 @@ function bindUi() {
     const { lat, lng } = mapView.getUserLocation();
     const cell = cellAt(lat, lng);
     const activity = engine.logActivity({ title: 'Voice memory', category: selectedCategory, captureType: 'voice', lat, lng, cell });
+    const uid = (await import('./auth.js').then((m) => m.supabase.auth.getUser())).data.user?.id;
+    const ext = voiceBlob.type.includes('mp4') ? 'm4a' : 'webm';
+    const path = `${uid}/${activity.id}.${ext}`;
     try {
-      const uid = (await import('./auth.js').then((m) => m.supabase.auth.getUser())).data.user?.id;
-      const ext = voiceBlob.type.includes('mp4') ? 'm4a' : 'webm';
-      const path = `${uid}/${activity.id}.${ext}`;
       const url = await uploadMedia(path, voiceBlob, voiceBlob.type);
       const idx = engine.getSnapshot().store.activities.findIndex((a) => a.id === activity.id);
       if (idx !== -1) engine.getSnapshot().store.activities[idx].media_url = url;
       try { localStorage.setItem('tourtle.v0.hex-progress', JSON.stringify(engine.getSnapshot().store)); } catch {}
-    } catch (e) { console.warn('[media] voice upload failed', e?.message || e); }
+    } catch (e) {
+      console.warn('[media] voice upload failed, queued for retry', e?.message || e);
+      mediaOutbox.push({ id: activity.id, path, blob: voiceBlob });
+    }
     closeVoiceArea(); renderHud();
   });
 
@@ -1253,11 +1275,21 @@ renderHud();
 mapView.paint(engine.getSnapshot().store);
 setInterval(tick, 1000);
 // Push the delta outbox on a cadence + whenever the app hides. Pulls stay
-// launch-only per V0 scope.
+// launch-only per V0 scope. Failed media uploads retry on the same cadence.
 setInterval(() => {
   flush(engine);
+  flushMediaOutbox(engine).then(() => renderHud()).catch(() => {});
 }, CONFIG.syncIntervalMs);
 window.addEventListener('pagehide', () => {
   flush(engine);
 });
+try {
+  window.__tourtleBoot = {
+    ok: true,
+    at: new Date().toISOString(),
+    user: currentUser?.email || null,
+    hasName: !!(currentUser?.user_metadata?.full_name || currentUser?.user_metadata?.name),
+    region: activeRegion,
+  };
+} catch {}
 toast('Hex fog is H3 resolution 9 — each tile is a real ~174m cell.');

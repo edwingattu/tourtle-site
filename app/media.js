@@ -48,6 +48,25 @@ export async function compressPhoto(fileOrBlob, maxEdge = 1600) {
   }
 }
 
+// Same-session retry outbox: blobs can't survive reload, but a flaky-network
+// failure shouldn't permanently strand a tile without its media_url.
+export const mediaOutbox = [];
+export async function flushMediaOutbox(engine) {
+  if (!mediaOutbox.length) return;
+  const done = [];
+  for (const job of mediaOutbox) {
+    try {
+      const url = await uploadMedia(job.path, job.blob, job.blob.type);
+      const acts = engine.getSnapshot().store.activities;
+      const rec = acts.find((a) => a.id === job.id);
+      if (rec) rec.media_url = url;
+      try { localStorage.setItem('tourtle.v0.hex-progress', JSON.stringify(engine.getSnapshot().store)); } catch {}
+      done.push(job);
+    } catch (e) { console.warn('[media] retry failed', e?.message || e); }
+  }
+  for (const d of done) mediaOutbox.splice(mediaOutbox.indexOf(d), 1);
+}
+
 export async function uploadMedia(path, blob, contentType) {
   const { data, error } = await supabase.storage.from('tourtle-media').upload(path, blob, {
     contentType: contentType || blob.type || 'application/octet-stream',
