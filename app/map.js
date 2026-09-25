@@ -632,10 +632,10 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       source: 'hex-fog',
       filter: ['==', ['get', 'status'], 'mastered'],
       paint: {
-        'line-color': '#00e676',
+        'line-color': '#2ed67c',
         'line-width': 4,
         'line-opacity': 1,
-        'line-opacity-transition': { duration: 600, delay: 0 },
+        'line-opacity-transition': { duration: 1800, delay: 0 },
       },
     });
     let masterPulseOn = false;
@@ -645,7 +645,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       try {
         map.setPaintProperty('hex-mastered-borders', 'line-opacity', masterPulseOn ? 1 : 0.35);
       } catch {}
-    }, 700);
+    }, 2000);
     // Area labels overlay the street hexes for orientation (their window
     // runs open-top); polygon fills hard-switch per FILL_WINDOW.
     for (const [band, vis] of Object.entries(BAND_VIS)) {
