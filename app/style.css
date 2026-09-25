@@ -1476,10 +1476,30 @@ button {
   background: transparent;
   color: #fff;
   border-radius: 999px;
-  padding: 8px 18px;
+  padding: 8px 14px;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.audio-btn svg { display: block; }
+
+.voice-wave span {
+  opacity: 0.3;
+}
+
+.voice-wave span.played {
+  opacity: 1;
+}
+
+.audio-wave span.bar {
+  opacity: 0.35;
+}
+
+.audio-wave span.bar.played {
+  opacity: 1;
 }
 
 .audio-track {

@@ -190,17 +190,67 @@ function fmtClock(s) {
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 }
 function resetViewerAudioUi() {
-  try { stopViewerWave(); } catch {}
+  stopPlayhead();
+  vBars.forEach((b) => b.classList.remove('played'));
   const fill = $('#viewerAudioFill'), t = $('#viewerAudioRemain');
   if (fill) fill.style.width = '0%';
   if (t) t.textContent = '0:00';
 }
-// Viewer waveform plumbing (module scope — survives tile switches)
-let vCtx = null, vAnalyser = null, vRaf = 0, vSrc = null, vBars = [];
-function stopViewerWave() {
-  cancelAnimationFrame(vRaf);
-  vRaf = 0;
+// Waveform: decode peaks once (truthful static wave) + clock-driven playhead.
+// No live analyser graph for playback — it fails silently on some devices.
+let decodeCtx = null;
+function getDecodeCtx() {
+  if (!decodeCtx) decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (decodeCtx.state === 'suspended') decodeCtx.resume().catch(() => {});
+  return decodeCtx;
 }
+async function decodePeaks(source, n) {
+  try {
+    const buf = source instanceof Blob ? await source.arrayBuffer() : await (await fetch(source)).arrayBuffer();
+    const audio = await getDecodeCtx().decodeAudioData(buf.slice(0));
+    const ch = audio.getChannelData(0);
+    const peaks = new Array(n).fill(0.08);
+    const step = Math.max(1, Math.floor(ch.length / n));
+    for (let i = 0; i < n; i++) {
+      let m = 0;
+      const start = i * step;
+      for (let j = start; j < Math.min(start + step, ch.length); j += 7) {
+        const v = Math.abs(ch[j]);
+        if (v > m) m = v;
+      }
+      peaks[i] = Math.max(0.08, Math.min(1, m));
+    }
+    return peaks;
+  } catch {
+    return null;
+  }
+}
+function paintPeaks(bars, peaks, maxPx) {
+  for (let i = 0; i < bars.length; i++) {
+    const p = peaks ? peaks[Math.min(i, peaks.length - 1)] : 0.3;
+    bars[i].style.height = `${Math.max(3, Math.round(p * maxPx))}px`;
+    bars[i].classList.remove('played');
+  }
+}
+let playheadRaf = 0;
+function stopPlayhead() {
+  cancelAnimationFrame(playheadRaf);
+  playheadRaf = 0;
+}
+function startPlayhead(audioEl, bars) {
+  stopPlayhead();
+  const tick = () => {
+    if (audioEl.paused) return;
+    if (audioEl.duration) {
+      const p = audioEl.currentTime / audioEl.duration;
+      for (let i = 0; i < bars.length; i++) bars[i].classList.toggle('played', i / bars.length <= p);
+    }
+    playheadRaf = requestAnimationFrame(tick);
+  };
+  tick();
+}
+// Viewer waveform plumbing (module scope — survives tile switches)
+let vBars = [];
 function buildViewerBars() {
   const wave = $('#viewerAudioWave');
   const remain = $('#viewerAudioRemain');
@@ -217,34 +267,7 @@ function buildViewerBars() {
     vBars.push(s);
   }
 }
-function startViewerWave(audioEl) {
-  try {
-    stopViewerWave();
-    if (!vCtx) {
-      vCtx = new (window.AudioContext || window.webkitAudioContext)();
-      vSrc = vCtx.createMediaElementSource(audioEl);
-      vAnalyser = vCtx.createAnalyser();
-      vAnalyser.fftSize = 256;
-      vSrc.connect(vAnalyser);
-      vAnalyser.connect(vCtx.destination);
-    }
-    if (vCtx.state === 'suspended') vCtx.resume().catch(() => {});
-    const data = new Uint8Array(vAnalyser.frequencyBinCount);
-    const tick = () => {
-      if (!vAnalyser) return;
-      if (!audioEl.paused) {
-        vAnalyser.getByteFrequencyData(data);
-        const n = vBars.length || 1;
-        for (let i = 0; i < vBars.length; i++) {
-          const v = data[Math.floor((i / n) * data.length * 0.7)] / 255;
-          vBars[i].style.height = `${Math.max(3, Math.round(v * 60))}px`;
-        }
-      }
-      vRaf = requestAnimationFrame(tick);
-    };
-    tick();
-  } catch (e) { console.warn('[viewer] wave failed', e?.message || e); }
-}
+
 function showViewerIndex(i) {
   if (!viewerItems.length) return;
   viewerIndex = (i + viewerItems.length) % viewerItems.length;
@@ -259,10 +282,15 @@ function showViewerIndex(i) {
     aud.src = url;
     wrap.hidden = false;
     buildViewerBars();
+    paintPeaks(vBars, null, 60);
     aud.onloadedmetadata = () => {
       const r = $('#viewerAudioRemain');
       if (r && aud.duration) r.textContent = fmtClock(aud.duration);
     };
+    // Decode true peaks in background; repaints when ready
+    decodePeaks(url, vBars.length).then((peaks) => {
+      if (peaks && aud.src === url) paintPeaks(vBars, peaks, 60);
+    });
   }
   else { img.src = url; img.hidden = false; }
   // Arrows flash for 1s; tap media to bring back
@@ -618,7 +646,7 @@ function bindUi() {
       e.stopPropagation();
       if (!aud?.src) return;
       aud.play().catch(() => {});
-      startViewerWave(aud);
+      startPlayhead(aud, vBars);
     });
     $('#viewerAudioPause')?.addEventListener('click', (e) => { e.stopPropagation(); aud?.pause(); });
     $('#viewerAudioStop')?.addEventListener('click', (e) => {
@@ -626,14 +654,15 @@ function bindUi() {
       if (!aud) return;
       aud.pause();
       aud.currentTime = 0;
-      stopViewerWave();
+      stopPlayhead();
+      vBars.forEach((b) => b.classList.remove('played'));
       if (fill) fill.style.width = '0%';
       if (remain && aud.duration) remain.textContent = fmtClock(aud.duration);
     });
-    aud?.addEventListener('pause', () => stopViewerWave());
     aud?.addEventListener('ended', () => {
-      stopViewerWave();
-      if (fill) fill.style.width = '0%';
+      stopPlayhead();
+      vBars.forEach((b) => b.classList.add('played'));
+      if (fill) fill.style.width = '100%';
       if (remain) remain.textContent = '0:00';
     });
     aud?.addEventListener('timeupdate', () => {
@@ -757,7 +786,7 @@ function bindUi() {
   }
   function closeVoiceArea() {
     try { stopWave(); } catch {}
-    try { stopPlayWave(); } catch {}
+    try { stopPlayhead(); } catch {}
     try { voiceRecorder?.state !== 'inactive' && voiceRecorder.stop(); } catch {}
     try { voiceStream?.getTracks().forEach((t) => t.stop()); } catch {}
     voiceStream = null; voiceBlob = null;
@@ -796,42 +825,9 @@ function bindUi() {
 
   $('#voiceClose')?.addEventListener('click', closeVoiceArea);
 
-  // Voice recorder (+ live waveform via AnalyserNode)
+  // Voice recorder: live mic wave while recording; decoded static wave +
+  // clock playhead for preview playback (no live graph — fails silently).
   let waveCtx = null, waveAnalyser = null, waveRaf = 0, waveBars = [];
-  let playCtx = null, playAnalyser = null, playRaf = 0, playSrc = null;
-  function stopPlayWave() {
-    cancelAnimationFrame(playRaf);
-    playRaf = 0;
-  }
-  function startPlayWave(audioEl) {
-    try {
-      stopPlayWave();
-      if (!playCtx) {
-        playCtx = new (window.AudioContext || window.webkitAudioContext)();
-        playSrc = playCtx.createMediaElementSource(audioEl);
-        playAnalyser = playCtx.createAnalyser();
-        playAnalyser.fftSize = 256;
-        playSrc.connect(playAnalyser);
-        playAnalyser.connect(playCtx.destination);
-      }
-      if (playCtx.state === 'suspended') playCtx.resume().catch(() => {});
-      const data = new Uint8Array(playAnalyser.frequencyBinCount);
-      const tick = () => {
-        if (!playAnalyser) return;
-        // Keep the loop alive across the play() async gap; only sample while sounding
-        if (!audioEl.paused) {
-          playAnalyser.getByteFrequencyData(data);
-          const n = waveBars.length || 1;
-          for (let i = 0; i < waveBars.length; i++) {
-            const v = data[Math.floor((i / n) * data.length * 0.7)] / 255;
-            waveBars[i].style.height = `${Math.max(3, Math.round(v * 26))}px`;
-          }
-        }
-        playRaf = requestAnimationFrame(tick);
-      };
-      tick();
-    } catch (e) { console.warn('[voice] play wave failed', e?.message || e); }
-  }
   function buildWaveBars() {
     const wave = $('#voiceWave');
     if (!wave) return;
@@ -888,6 +884,10 @@ function bindUi() {
         $('#voiceSave').hidden = false; $('#voicePlay').hidden = false;
         clearInterval(voiceTimer);
         stopWave();
+        // Static truthful wave from decoded peaks; playhead animates on Play
+        decodePeaks(voiceBlob, waveBars.length).then((peaks) => {
+          paintPeaks(waveBars, peaks, 24);
+        });
       };
       voiceRecorder.start();
       startWave(voiceStream);
@@ -900,11 +900,13 @@ function bindUi() {
   $('#voicePlay')?.addEventListener('click', () => {
     const a = $('#voiceAudio');
     if (!a) return;
-    if (a.paused) { a.play().catch(() => {}); startPlayWave(a); }
-    else { a.pause(); stopPlayWave(); }
+    if (a.paused) { a.play().catch(() => {}); startPlayhead(a, waveBars); }
+    else { a.pause(); }
   });
-  $('#voiceAudio')?.addEventListener('pause', () => stopPlayWave());
-  $('#voiceAudio')?.addEventListener('ended', () => stopPlayWave());
+  $('#voiceAudio')?.addEventListener('ended', () => {
+    stopPlayhead();
+    waveBars.forEach((b) => b.classList.add('played'));
+  });
   $('#voiceSave')?.addEventListener('click', async () => {
     if (!voiceBlob) return;
     const { lat, lng } = mapView.getUserLocation();
