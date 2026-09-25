@@ -14,6 +14,7 @@ import { setupJoystick } from './joystick.js';
 import { regionCenter, regionCredit, regionForPoint, savedRegion, setRegion } from './areas.js';
 import * as areasDbg from './areas.js';
 import { isAdmin, isSuperadmin } from './roles.js';
+import { compressPhoto, pickAudioMime, pickPhotoMime, pickVideoMime, uploadMedia } from './media.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -432,9 +433,59 @@ function bindUi() {
   const profileBtn = $('#profileButton');
   if (profileBtn) profileBtn.textContent = initial;
 
+  // Inline Photo / Voice capture (card itself)
+  const photoArea = $('#photoCapture');
+  const voiceArea = $('#voiceCapture');
+  let photoStream = null, videoRecorder = null, videoChunks = [], photoBlob = null, videoBlob = null, photoMode = 'photo';
+  let voiceStream = null, voiceRecorder = null, voiceChunks = [], voiceBlob = null, voiceTimer = null, voiceSec = 0;
+
+  function stopPhotoStream() { try { photoStream?.getTracks().forEach((t) => t.stop()); } catch {} photoStream = null; const v = $('#photoPreview'); if (v) v.srcObject = null; }
+  function showPhotoArea(mode = 'photo') {
+    photoMode = mode;
+    if (voiceArea) voiceArea.hidden = true;
+    if (photoArea) photoArea.hidden = false;
+    document.querySelectorAll('.capture-tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === mode));
+    const hint = $('#photoHint'); if (hint) hint.textContent = mode === 'video' ? 'Video: 10s max' : 'Allow camera or pick file';
+    startPhotoPreview();
+  }
+  async function startPhotoPreview() {
+    const video = $('#photoPreview');
+    const fileInput = $('#photoFile');
+    const shutter = $('#photoShutter');
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('no cam');
+      photoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: photoMode === 'video' });
+      if (video) { video.srcObject = photoStream; video.hidden = false; }
+      if (shutter) shutter.textContent = photoMode === 'video' ? '● Record' : 'Capture';
+      if (fileInput) fileInput.hidden = true;
+    } catch {
+      if (video) video.hidden = true;
+      if (fileInput) fileInput.hidden = false;
+      const hint = $('#photoHint'); if (hint) hint.textContent = 'Camera blocked — pick file';
+    }
+  }
+  function closePhotoArea() { stopPhotoStream(); if (photoArea) photoArea.hidden = true; photoBlob = videoBlob = null; const thumb = $('#photoThumb'); if (thumb) { thumb.hidden = true; thumb.src = ''; } $('#photoSave').hidden = true; $('#photoRetake').hidden = true; }
+
+  function showVoiceArea() {
+    if (photoArea) { photoArea.hidden = true; stopPhotoStream(); }
+    if (voiceArea) voiceArea.hidden = false;
+  }
+  function closeVoiceArea() {
+    try { voiceRecorder?.state !== 'inactive' && voiceRecorder.stop(); } catch {}
+    try { voiceStream?.getTracks().forEach((t) => t.stop()); } catch {}
+    voiceStream = null; voiceBlob = null;
+    clearInterval(voiceTimer); voiceSec = 0;
+    const t = $('#voiceTimer'); if (t) t.textContent = '0:00';
+    const a = $('#voiceAudio'); if (a) { a.hidden = true; a.src = ''; }
+    $('#voiceSave').hidden = true; $('#voicePlay').hidden = true; $('#voiceStop').hidden = true;
+    if (voiceArea) voiceArea.hidden = true;
+  }
+
   document.querySelectorAll('[data-capture]').forEach((button) => {
     button.addEventListener('click', () => {
       const type = button.dataset.capture;
+      if (type === 'photo') { showPhotoArea('photo'); return; }
+      if (type === 'voice') { showVoiceArea(); return; }
       if (type === 'session') {
         const snap = engine.getSnapshot();
         if (!snap.outing) {
@@ -442,7 +493,7 @@ function bindUi() {
           const here = mapView.getUserLocation();
           engine.dwell(cellAt(here.lat, here.lng), 0);
           button.querySelector('b').textContent = 'End outing';
-          button.querySelector('small').textContent = 'Close session and boost touched tiles';
+          const sm = button.querySelector('small'); if (sm) sm.textContent = 'Close session and boost touched tiles';
           toast('Outing started. Tiles you enter now will all receive the Activity boost.');
           renderHud();
           return;
@@ -452,6 +503,96 @@ function bindUi() {
       }
       openDialog(type);
     });
+  });
+
+  // Photo tabs + actions
+  document.querySelectorAll('.capture-tab').forEach((t) => t.addEventListener('click', () => showPhotoArea(t.dataset.tab)));
+  $('#photoClose')?.addEventListener('click', closePhotoArea);
+  $('#voiceClose')?.addEventListener('click', closeVoiceArea);
+  $('#photoFile')?.addEventListener('change', async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    if (f.type.startsWith('video/')) { videoBlob = f; photoBlob = null; const th = $('#photoThumb'); if (th) { th.src = URL.createObjectURL(f); th.hidden = false; } $('#photoSave').hidden = false; $('#photoRetake').hidden = false; }
+    else { photoBlob = await compressPhoto(f); const th = $('#photoThumb'); if (th) { th.src = URL.createObjectURL(photoBlob); th.hidden = false; } $('#photoSave').hidden = false; $('#photoRetake').hidden = false; }
+  });
+  $('#photoShutter')?.addEventListener('click', async () => {
+    const video = $('#photoPreview');
+    if (photoMode === 'photo') {
+      const canvas = $('#photoCanvas');
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      const blob = await new Promise((r) => canvas.toBlob(r, pickPhotoMime(), 0.78));
+      photoBlob = blob; videoBlob = null;
+      const th = $('#photoThumb'); th.src = URL.createObjectURL(blob); th.hidden = false;
+      $('#photoSave').hidden = false; $('#photoRetake').hidden = false;
+    } else {
+      if (videoRecorder && videoRecorder.state === 'recording') { videoRecorder.stop(); return; }
+      videoChunks = [];
+      const mime = pickVideoMime();
+      videoRecorder = new MediaRecorder(photoStream, mime ? { mimeType: mime } : undefined);
+      videoRecorder.ondataavailable = (ev) => { if (ev.data.size) videoChunks.push(ev.data); };
+      videoRecorder.onstop = () => { videoBlob = new Blob(videoChunks, { type: videoRecorder.mimeType || 'video/webm' }); const th = $('#photoThumb'); th.src = URL.createObjectURL(videoBlob); th.hidden = false; $('#photoSave').hidden = false; $('#photoRetake').hidden = false; $('#photoShutter').textContent = '● Record'; };
+      videoRecorder.start();
+      $('#photoShutter').textContent = '■ Stop';
+      setTimeout(() => { if (videoRecorder?.state === 'recording') videoRecorder.stop(); }, 30000);
+    }
+  });
+  $('#photoRetake')?.addEventListener('click', () => { photoBlob = videoBlob = null; $('#photoThumb').hidden = true; $('#photoSave').hidden = true; $('#photoRetake').hidden = true; if (photoMode === 'photo') $('#photoShutter').textContent = 'Capture'; });
+  $('#photoSave')?.addEventListener('click', async () => {
+    const blob = photoBlob || videoBlob; if (!blob) return;
+    const { lat, lng } = mapView.getUserLocation();
+    const cell = cellAt(lat, lng);
+    const title = blob.type.startsWith('video/') ? 'Video memory' : 'Photo memory';
+    const activity = engine.logActivity({ title, category: selectedCategory, captureType: blob.type.startsWith('video/') ? 'video' : 'photo', lat, lng, cell });
+    try {
+      const uid = (await import('./auth.js').then((m) => m.supabase.auth.getUser())).data.user?.id;
+      const ext = blob.type.includes('webp') ? 'webp' : blob.type.includes('mp4') ? 'mp4' : blob.type.startsWith('video/') ? 'webm' : 'jpg';
+      const path = `${uid}/${activity.id}.${ext}`;
+      const url = await uploadMedia(path, blob, blob.type);
+      // patch activity in store with media url
+      const idx = engine.getSnapshot().store.activities.findIndex((a) => a.id === activity.id);
+      if (idx !== -1) engine.getSnapshot().store.activities[idx].media_url = url;
+      try { localStorage.setItem('tourtle.v0.hex-progress', JSON.stringify(engine.getSnapshot().store)); } catch {}
+    } catch (e) { console.warn('[media] upload failed', e?.message || e); }
+    closePhotoArea(); renderHud();
+  });
+
+  // Voice recorder
+  $('#voiceRec')?.addEventListener('click', async () => {
+    try {
+      voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceChunks = [];
+      const mime = pickAudioMime();
+      voiceRecorder = new MediaRecorder(voiceStream, mime ? { mimeType: mime } : undefined);
+      voiceRecorder.ondataavailable = (e) => { if (e.data.size) voiceChunks.push(e.data); };
+      voiceRecorder.onstop = () => {
+        voiceBlob = new Blob(voiceChunks, { type: voiceRecorder.mimeType || 'audio/webm' });
+        const a = $('#voiceAudio'); a.src = URL.createObjectURL(voiceBlob); a.hidden = false;
+        $('#voiceSave').hidden = false; $('#voicePlay').hidden = false;
+        clearInterval(voiceTimer); 
+      };
+      voiceRecorder.start();
+      $('#voiceRec').hidden = true; $('#voiceStop').hidden = false;
+      voiceSec = 0; const timer = $('#voiceTimer');
+      voiceTimer = setInterval(() => { voiceSec++; if (timer) timer.textContent = `${Math.floor(voiceSec/60)}:${String(voiceSec%60).padStart(2,'0')}`; if (voiceSec >= 120) voiceRecorder.stop(); }, 1000);
+    } catch (e) { console.warn('[voice] mic denied', e?.message || e); }
+  });
+  $('#voiceStop')?.addEventListener('click', () => { try { voiceRecorder.stop(); } catch {} $('#voiceStop').hidden = true; $('#voiceRec').hidden = false; voiceStream?.getTracks().forEach((t) => t.stop()); clearInterval(voiceTimer); });
+  $('#voicePlay')?.addEventListener('click', () => { const a = $('#voiceAudio'); if (a) a.play(); });
+  $('#voiceSave')?.addEventListener('click', async () => {
+    if (!voiceBlob) return;
+    const { lat, lng } = mapView.getUserLocation();
+    const cell = cellAt(lat, lng);
+    const activity = engine.logActivity({ title: 'Voice memory', category: selectedCategory, captureType: 'voice', lat, lng, cell });
+    try {
+      const uid = (await import('./auth.js').then((m) => m.supabase.auth.getUser())).data.user?.id;
+      const ext = voiceBlob.type.includes('mp4') ? 'm4a' : 'webm';
+      const path = `${uid}/${activity.id}.${ext}`;
+      const url = await uploadMedia(path, voiceBlob, voiceBlob.type);
+      const idx = engine.getSnapshot().store.activities.findIndex((a) => a.id === activity.id);
+      if (idx !== -1) engine.getSnapshot().store.activities[idx].media_url = url;
+      try { localStorage.setItem('tourtle.v0.hex-progress', JSON.stringify(engine.getSnapshot().store)); } catch {}
+    } catch (e) { console.warn('[media] voice upload failed', e?.message || e); }
+    closeVoiceArea(); renderHud();
   });
 
   document.querySelectorAll('[data-category]').forEach((button) => {
