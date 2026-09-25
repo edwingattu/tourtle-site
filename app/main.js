@@ -445,7 +445,25 @@ function renderHud() {
   updateAreaName(selectedCell);
   updateCountdown(rec);
   try { renderTileGallery(); } catch {}
+  updateCaptureAvailability();
   mapView.paint(snap.store);
+}
+
+// Photo + Outing require physical presence: enabled only when the selected
+// tile is the user's live tile. Voice + gallery stay available everywhere.
+function updateCaptureAvailability() {
+  let present = false;
+  try {
+    if (mapView && selectedCell) {
+      const { lat, lng } = mapView.getUserLocation();
+      present = cellAt(lat, lng) === selectedCell;
+    }
+  } catch {}
+  document.querySelectorAll('[data-capture="photo"], [data-capture="session"]').forEach((b) => {
+    b.disabled = !present;
+    b.classList.toggle('muted', !present);
+    b.title = present ? '' : 'Go to this tile to capture';
+  });
 }
 
 function applyPosition(lat, lng, { fly = false, dwellMs = 0 } = {}) {

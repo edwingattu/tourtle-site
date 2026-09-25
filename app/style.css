@@ -833,6 +833,20 @@ button {
   box-shadow: 0 6px 15px rgba(30, 80, 69, 0.08);
 }
 
+.activity-choice.muted,
+.activity-choice:disabled {
+  opacity: 0.35;
+  filter: grayscale(0.6);
+  cursor: not-allowed;
+}
+
+.activity-choice.muted:hover,
+.activity-choice:disabled:hover {
+  transform: none;
+  border-color: var(--line);
+  box-shadow: none;
+}
+
 .activity-choice b {
   display: block;
   font-size: 12px;
