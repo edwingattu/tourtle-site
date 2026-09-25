@@ -469,16 +469,158 @@ function tick() {
   }
 }
 
-// Region: explicit ?region= wins (persisted), else saved, else GPS detect
-// from the base cell. Must precede map ready (packs load per region).
+// Location gate: no implicit Hyderabad. Force prompt unless explicit ?region=
+// or a prior explicit choice exists. Persists as tourtle.v0.locationChoice.
+const LOCATION_CHOICE_KEY = 'tourtle.v0.locationChoice';
+function getLocationChoice() {
+  try { return localStorage.getItem(LOCATION_CHOICE_KEY); } catch { return null; }
+}
+function setLocationChoice(v) {
+  try { localStorage.setItem(LOCATION_CHOICE_KEY, v); } catch {}
+}
+function needsGate() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('region')) return false;
+  if (getLocationChoice()) return false;
+  // Legacy: users who got the Hyderabad default with no explicit choice
+  const base = engine.getSnapshot().store.baseCell;
+  const dCell = cellAt(CONFIG.defaultCenter[1], CONFIG.defaultCenter[0]);
+  if (base === dCell && !savedRegion()) return true;
+  // No choice at all → gate
+  if (!getLocationChoice() && !savedRegion()) return true;
+  // If savedRegion exists but no locationChoice (old user), still gate per spec
+  if (savedRegion() && !getLocationChoice()) return true;
+  return false;
+}
+function guessCountry() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    if (tz.includes('Kolkata') || tz.includes('Asia/')) return 'IN';
+    if (tz.includes('New_York') || tz.includes('America/')) return 'US';
+  } catch {}
+  return null;
+}
+function renderCityCards(filter) {
+  const wrap = $('#gateCards');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const regions = filter === 'IN' ? ['hyd'] : filter === 'US' ? ['nyc'] : ['hyd', 'nyc'];
+  for (const r of regions) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'city-card';
+    btn.dataset.region = r;
+    const label = areasDbg.regionLabel(r);
+    const count = r === 'nyc' ? '262 NTAs' : '145 wards';
+    btn.innerHTML = `<span><b>${label}</b><small>${count} · ${r === 'nyc' ? 'USA' : 'India'}</small></span><span>→</span>`;
+    btn.addEventListener('click', async () => {
+      setLocationChoice(`city:${r}`);
+      setRegion(r, { persist: true });
+      activeRegion = r;
+      hideGate();
+      await postGateSetup(r);
+    });
+    wrap.appendChild(btn);
+  }
+}
+function showGateState(which) {
+  $('#gatePrompt').hidden = which !== 'prompt';
+  $('#gatePicker').hidden = which !== 'picker';
+  $('#gateLoading').hidden = which !== 'loading';
+}
+function hideGate() {
+  const dlg = $('#locationGate');
+  try { dlg.close(); } catch {}
+  dlg.hidden = true;
+}
+async function showLocationGate() {
+  const dlg = $('#locationGate');
+  if (!dlg) return;
+  dlg.hidden = false;
+  showGateState('prompt');
+  try { dlg.showModal(); } catch { dlg.setAttribute('open',''); }
+  // Bind once
+  if (!dlg.dataset.bound) {
+    dlg.dataset.bound = '1';
+    $('#gateShareBtn')?.addEventListener('click', async () => {
+      showGateState('loading');
+      if (!navigator.geolocation) {
+        renderCityCards(guessCountry());
+        showGateState('picker');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude, lng = pos.coords.longitude;
+          const region = regionForPoint(lat, lng);
+          setLocationChoice('granted');
+          setRegion(region, { persist: true });
+          activeRegion = region;
+          engine.setBase(lat, lng);
+          locationFilter.lastGood = { lat, lng };
+          hideGate();
+          await postGateSetup(region, { lat, lng, fly: true });
+          setTracking(true);
+        },
+        () => {
+          renderCityCards(guessCountry());
+          showGateState('picker');
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      );
+    });
+    $('#gatePickBtn')?.addEventListener('click', () => {
+      renderCityCards(guessCountry());
+      showGateState('picker');
+    });
+    $('#gateBackBtn')?.addEventListener('click', () => showGateState('prompt'));
+  }
+}
 let activeRegion = 'hyd';
+let gatePending = null;
 {
   const params = new URLSearchParams(window.location.search);
   const explicit = params.get('region');
-  const base = cellCenter(engine.getSnapshot().store.baseCell);
-  activeRegion = explicit || savedRegion() || regionForPoint(base.lat, base.lng);
-  setRegion(activeRegion, { persist: !!explicit });
-  console.log(`[region] active=${activeRegion} explicit=${explicit} saved=${savedRegion()}`);
+  if (explicit) {
+    activeRegion = explicit;
+    setRegion(activeRegion, { persist: true });
+    setLocationChoice(`city:${explicit}`);
+  } else if (getLocationChoice()?.startsWith('city:')) {
+    activeRegion = getLocationChoice().split(':')[1];
+    setRegion(activeRegion, { persist: false });
+  } else if (getLocationChoice() === 'granted' && savedRegion()) {
+    activeRegion = savedRegion();
+    setRegion(activeRegion, { persist: false });
+  } else if (savedRegion() && !needsGate()) {
+    activeRegion = savedRegion();
+    setRegion(activeRegion, { persist: false });
+  } else if (!needsGate()) {
+    const base = cellCenter(engine.getSnapshot().store.baseCell);
+    activeRegion = regionForPoint(base.lat, base.lng);
+    setRegion(activeRegion, { persist: false });
+  } else {
+    // Gate will decide; keep hyd as placeholder for map init (not shown as user loc)
+    setRegion('hyd', { persist: false });
+    gatePending = showLocationGate();
+  }
+  console.log(`[region] active=${activeRegion} gatePending=${!!gatePending} saved=${savedRegion()} choice=${getLocationChoice()}`);
+}
+async function postGateSetup(region, opts = {}) {
+  await areasDbg.loadCore();
+  if (opts.lat != null) {
+    mapView.setUserLocation(opts.lng, opts.lat, { fly: !!opts.fly });
+    if (opts.fly) mapView.map.setCenter([opts.lng, opts.lat]);
+  } else {
+    const [lng, lat] = regionCenter();
+    mapView.setUserLocation(lng, lat);
+    mapView.map.setCenter([lng, lat]);
+    mapView.map.setZoom(region === 'nyc' ? 10 : 12);
+    engine.setBase(lat, lng);
+  }
+  mapView.paint(engine.getSnapshot().store);
+  selectCell(mapView.cellUnderUser());
+  const credit = $('#dataCredit');
+  if (credit) credit.textContent = areasDbg.regionCredit();
 }
 /** Swap the active region's packs and repaint. Districts lazy-load on zoom. */
 let regionSwitching = false;
@@ -510,15 +652,28 @@ function autoRegion(lat, lng) {
 }
 
 await mapView.ready();
-if (activeRegion === 'nyc') {
-  const [lng, lat] = regionCenter();
-  mapView.setUserLocation(lng, lat);
-  mapView.map.setCenter([lng, lat]);
-  mapView.map.setZoom(10);
-}
-engine.subscribe(() => mapView.paint(engine.getSnapshot().store));
-if (activeRegion !== 'nyc') {
-  mapView.setUserLocation(CONFIG.defaultCenter[0], CONFIG.defaultCenter[1]);
+if (gatePending) {
+  // Gate is blocking — don't seed a Hyderabad default. Picker/share will
+  // call postGateSetup which sets the real center and selects the cell.
+  engine.subscribe(() => mapView.paint(engine.getSnapshot().store));
+} else {
+  if (activeRegion === 'nyc') {
+    const [lng, lat] = regionCenter();
+    mapView.setUserLocation(lng, lat);
+    mapView.map.setCenter([lng, lat]);
+    mapView.map.setZoom(10);
+  } else {
+    // No gate: restore last granted base or saved region center
+    const base = cellCenter(engine.getSnapshot().store.baseCell);
+    const hasRealBase = getLocationChoice() === 'granted' || getLocationChoice()?.startsWith('city:');
+    if (hasRealBase) {
+      mapView.setUserLocation(base.lng, base.lat);
+      mapView.map.setCenter([base.lng, base.lat]);
+    } else {
+      mapView.setUserLocation(CONFIG.defaultCenter[0], CONFIG.defaultCenter[1]);
+    }
+  }
+  engine.subscribe(() => mapView.paint(engine.getSnapshot().store));
 }
 // Cloud bootstrap (silent-local on failure): seed local history, push it up,
 // pull canonical state — then repaint from merged totals.
@@ -536,8 +691,11 @@ await bootstrap(engine);
       `area=${area?.id || 'none'} district=${dist?.id || 'none'}`,
   );
 }
-selectCell(mapView.cellUnderUser());
+if (!gatePending) selectCell(mapView.cellUnderUser());
 bindUi();
+// If gated, re-run select after picker/share picks a city — postGateSetup handles it.
+// Add a helper on window to re-trigger gate (for manual city switch later)
+window.__tourtleGate = { show: showLocationGate, choice: getLocationChoice };
 setupJoystick({
   mapView,
   engine,

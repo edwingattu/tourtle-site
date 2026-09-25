@@ -1031,6 +1031,70 @@ button {
   padding: 4px 6px;
 }
 
+/* Location gate */
+.gate-dialog {
+  max-width: 420px;
+  width: calc(100% - 32px);
+}
+
+.gate-card {
+  text-align: center;
+  padding: 28px 24px 22px;
+}
+
+.gate-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: #e2effb;
+  color: #2a69aa;
+}
+
+.gate-state h2 {
+  text-align: center;
+}
+
+.gate-privacy {
+  margin: 12px 0 0;
+  color: #8a9aa8;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.gate-secondary {
+  margin-top: 10px;
+  width: 100%;
+  text-align: center;
+  padding: 10px;
+}
+
+.gate-cards {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+  text-align: left;
+}
+
+.city-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  text-align: left;
+}
+
+.city-card b { font-size: 14px; }
+.city-card small { display: block; color: #8a9aa8; font-size: 11px; margin-top: 2px; }
+.city-card span:last-child { color: var(--navy); font-weight: 800; font-size: 12px; }
+
 .toast.visible {
   transform: translate(-50%, 0);
   opacity: 1;
