@@ -13,7 +13,7 @@ import { bootstrap, exposeDebug, flush } from './sync.js';
 import { setupJoystick } from './joystick.js';
 import { regionCenter, regionCredit, regionForPoint, savedRegion, setRegion } from './areas.js';
 import * as areasDbg from './areas.js';
-import { isAdmin } from './roles.js';
+import { isAdmin, isSuperadmin } from './roles.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -27,12 +27,15 @@ if ('serviceWorker' in navigator && !new URLSearchParams(window.location.search)
 const session = await requireSessionOrRedirect();
 const currentUser = session.user;
 
-// Role gate: sandbox + diagnostics exist only for admin rung and up.
-// Everyone else gets the fixed live build (diagnostic elements removed).
+// Role gate: sandbox + zoom for admin+, tilt for superadmin only.
 const adminUser = await isAdmin();
+const superadminUser = await isSuperadmin();
 if (!adminUser) {
   $('#joystickButton')?.remove();
   $('#zoomLevel')?.remove();
+  $('#tiltLevel')?.remove();
+} else if (!superadminUser) {
+  $('#tiltLevel')?.remove();
 }
 
 const engine = createEngine();

@@ -131,13 +131,28 @@ button {
   flex-wrap: wrap;
 }
 
-/* Diagnostic zoom readout (V0 transient tuning). Top-left slot, freed by
- * the retired legend. */
+/* Diagnostic readouts (V0 transient tuning). Top-left stack, freed by
+ * the retired legend. Superadmin gets both; admin gets zoom only. */
 .zoom-level {
   position: absolute;
   z-index: 3;
   left: 24px;
   top: 88px;
+  background: rgba(23, 54, 104, 0.85);
+  color: #fff;
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.tilt-level {
+  position: absolute;
+  z-index: 3;
+  left: 24px;
+  top: 118px;
   background: rgba(23, 54, 104, 0.85);
   color: #fff;
   border-radius: 999px;

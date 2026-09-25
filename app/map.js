@@ -756,14 +756,18 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // Track gestures live: paints are rAF-coalesced and status-skipped, so
     // per-frame cost is one small polyfill (or a cache slice) at most.
     map.on('move', refreshViewport);
-    // Diagnostic zoom readout for transient tuning.
+    // Diagnostic readouts for transient tuning (named pills).
     const zoomEl = document.getElementById('zoomLevel');
-    const refreshZoom = () => {
-      if (zoomEl) zoomEl.textContent = map.getZoom().toFixed(2);
+    const tiltEl = document.getElementById('tiltLevel');
+    const refreshDiag = () => {
+      if (zoomEl) zoomEl.textContent = `ZOOM ${map.getZoom().toFixed(2)}`;
+      if (tiltEl) tiltEl.textContent = `TILT ${map.getPitch().toFixed(0)}°`;
     };
-    map.on('move', refreshZoom);
-    map.on('zoomend', refreshZoom);
-    refreshZoom();
+    map.on('move', refreshDiag);
+    map.on('zoomend', refreshDiag);
+    map.on('pitch', refreshDiag);
+    map.on('rotate', refreshDiag);
+    refreshDiag();
   });
 
   return {
