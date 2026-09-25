@@ -593,8 +593,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // Hex base MUST be added before every polygon layer: insertion order
     // is paint order, so this keeps hexes under all fills and labels.
     // Seamless fill, antialias off, no seams. Locked blue-tinted dark grey,
-    // activated 60 sky blue / 15 grey, mastered (unlocked + stored media)
-    // green. Unlocked is clear.
+    // activated 60 sky blue / 15 grey. Unlocked + mastered (stored media)
+    // are clear — mastered gets its green border from hex-mastered-borders.
     map.addLayer({
       id: 'hex-fills',
       type: 'fill',
@@ -607,7 +607,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'unlocked',
           'rgba(0,0,0,0)',
           'mastered',
-          '#5cc581',
+          'rgba(0,0,0,0)',
           'activated',
           '#86bddb',
           '#3a4b5e',
@@ -618,10 +618,21 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           'unlocked',
           0,
           'mastered',
-          0.7,
+          0,
           0.62,
         ],
         'fill-opacity-transition': { duration: 300, delay: 0 },
+      },
+    });
+    // Mastered border: true line layer over the clear fill — no double-draw.
+    map.addLayer({
+      id: 'hex-mastered-borders',
+      type: 'line',
+      source: 'hex-fog',
+      filter: ['==', ['get', 'status'], 'mastered'],
+      paint: {
+        'line-color': '#5cc581',
+        'line-width': 2,
       },
     });
     // Area labels overlay the street hexes for orientation (their window
