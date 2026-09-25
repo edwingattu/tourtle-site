@@ -798,6 +798,13 @@ button {
   place-items: center;
 }
 
+.section-subtitle {
+  margin: -8px 0 14px;
+  color: #6e8278;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .activity-choices {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -805,8 +812,14 @@ button {
 }
 
 .activity-choice {
-  padding: 14px 11px;
-  text-align: left;
+  aspect-ratio: 1;
+  padding: 12px 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: white;
@@ -822,28 +835,27 @@ button {
 
 .activity-choice b {
   display: block;
-  font-size: 11px;
-  line-height: 1.25;
-}
-
-.activity-choice small {
-  display: block;
-  font-size: 9px;
-  color: #81908a;
-  line-height: 1.4;
-  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .choice-icon {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 9px;
-  margin-bottom: 10px;
   background: #e2effb;
   color: #2a69aa;
   font-weight: 800;
+  flex: none;
+}
+
+@media (max-width: 840px) {
+  .activity-choices {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .outing-chip {
@@ -1180,8 +1192,5 @@ button {
   }
   .stat-card {
     padding: 12px 10px;
-  }
-  .activity-choices {
-    grid-template-columns: 1fr;
   }
 }
