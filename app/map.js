@@ -45,7 +45,6 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
   let lastStoreRef = null;
   let lastFogKey = null;
   let lastStatusSig = null;
-  let lastActSig = null;
   let cachedCellsKey = null;
   let cachedCells = null;
   const boundaryCache = new Map();
@@ -481,13 +480,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       paintSemanticBand(store, band);
     }
 
-    const acts = store.activities || [];
-    const actSig = `${acts.length}:${acts.length ? acts[acts.length - 1].createdAt : 0}`;
-    const pinsSource = map.getSource('activities');
-    if (pinsSource && actSig !== lastActSig) {
-      pinsSource.setData(activityCollection(acts));
-      lastActSig = actSig;
-    }
+    // Activity pins are tap-driven (showTilePins/hideTilePins) — never painted here.
   }
 
   function activityCollection(activities) {
@@ -737,17 +730,30 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       }
     }
 
+    // Activity pins: hidden unless a mastered tile is tapped. Same green as
+    // the mastered border, pitch-aligned so they sit flat on the tilted map.
     map.addLayer({
       id: 'activity-pins',
       type: 'circle',
       source: 'activities',
       paint: {
         'circle-radius': 7,
-        'circle-color': ['get', 'color'],
+        'circle-color': '#2ed67c',
         'circle-stroke-width': 2,
         'circle-stroke-color': '#fff',
+        'circle-pitch-alignment': 'map',
+        'circle-opacity': 0,
+        'circle-opacity-transition': { duration: 300, delay: 0 },
       },
     });
+    // Tap-gated pins: show for the tapped mastered tile, then fade over 60s.
+    let pinFadeTimer = 0;
+    function setPinsOpacity(v, transitionMs) {
+      try {
+        map.setPaintProperty('activity-pins', 'circle-opacity-transition', { duration: transitionMs, delay: 0 });
+        map.setPaintProperty('activity-pins', 'circle-opacity', v);
+      } catch {}
+    }
 
     map.on('click', 'hex-fills', (event) => {
       const feature = event.features?.[0];
@@ -819,6 +825,21 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     },
     paint(store) {
       schedulePaint(store);
+    },
+    showTilePins(store, cell) {
+      const pinsSource = map.getSource('activities');
+      if (!pinsSource) return;
+      window.clearTimeout(pinFadeTimer);
+      const acts = (store.activities || []).filter((a) => a.cell === cell && a.lat != null && a.lng != null);
+      pinsSource.setData(activityCollection(acts));
+      setPinsOpacity(1, 300);
+      pinFadeTimer = window.setTimeout(() => setPinsOpacity(0, 60000), 500);
+    },
+    hideTilePins() {
+      const pinsSource = map.getSource('activities');
+      if (!pinsSource) return;
+      window.clearTimeout(pinFadeTimer);
+      setPinsOpacity(0, 300);
     },
     setSelected(cell) {
       selectedCell = cell;

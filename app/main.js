@@ -369,6 +369,13 @@ async function placeName(lat, lng) {
   }
 }
 
+// Mastered = unlocked + stored media (mirrors the green border rule in map.js)
+function isMasteredCell(store, cell) {
+  const rec = store.tiles[cell];
+  if (!isUnlocked(rec)) return false;
+  return (store.activities || []).some((a) => a.cell === cell && (a.media_url || a.localUrl));
+}
+
 function selectCell(cell, { toastOnSelect = false } = {}) {
   selectedCell = cell;
   mapView.setSelected(cell);
@@ -379,6 +386,9 @@ function selectCell(cell, { toastOnSelect = false } = {}) {
   updateAreaName(cell);
   updateCityTitle();
   updateCountdown(info.rec);
+  // Activity dots: only for tapped mastered tiles, fading over 60s
+  if (isMasteredCell(snap.store, cell)) mapView.showTilePins(snap.store, cell);
+  else mapView.hideTilePins();
   // Animate bar 0 → current on every tap (progress already reflects tile)
   const bar = document.getElementById('tileProgressBar');
   if (bar) {
