@@ -111,17 +111,23 @@ function updateCityTitle() {
   el.textContent = `My ${label}`;
 }
 
-function updateAreaName() {
+function updateAreaName(cell = selectedCell) {
   const el = $('#areaName');
   const hexEl = $('#hexLine');
   if (!el) return;
-  const { lng, lat } = mapView ? mapView.getUserLocation() : { lng: CONFIG.defaultCenter[0], lat: CONFIG.defaultCenter[1] };
+  let lat, lng, id;
+  if (cell) {
+    const c = cellCenter(cell);
+    lat = c.lat; lng = c.lng; id = cell;
+  } else if (mapView) {
+    const p = mapView.getUserLocation();
+    lat = p.lat; lng = p.lng; id = cellAt(lat, lng);
+  } else {
+    lat = CONFIG.defaultCenter[1]; lng = CONFIG.defaultCenter[0]; id = cellAt(lat, lng);
+  }
   const area = areasDbg.areaAt(lng, lat) || areasDbg.districtAt(lng, lat);
   el.textContent = area ? area.name : 'Outside mapped areas';
-  if (hexEl) {
-    const cell = cellAt(lat, lng);
-    hexEl.textContent = `H3 · ${cell}`;
-  }
+  if (hexEl) hexEl.textContent = `H3 · ${id}`;
 }
 
 function updateCountdown(rec) {
@@ -181,7 +187,7 @@ function selectCell(cell, { toastOnSelect = false } = {}) {
   mapView.paint(snap.store);
   const info = mapView.inspectCell(snap.store, cell);
   const pct = progressPercent(info.rec);
-  updateAreaName();
+  updateAreaName(cell);
   updateCityTitle();
   updateCountdown(info.rec);
   if (toastOnSelect) {
@@ -238,7 +244,7 @@ function renderHud() {
     }
   }
   updateCityTitle();
-  updateAreaName();
+  updateAreaName(selectedCell);
   updateCountdown(rec);
   mapView.paint(snap.store);
 }
