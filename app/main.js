@@ -256,6 +256,7 @@ function renderHud() {
   updateCityTitle();
   updateAreaName(selectedCell);
   updateCountdown(rec);
+  try { renderTileGallery(); } catch {}
   mapView.paint(snap.store);
 }
 
@@ -433,41 +434,128 @@ function bindUi() {
   const profileBtn = $('#profileButton');
   if (profileBtn) profileBtn.textContent = initial;
 
-  // Inline Photo / Voice capture (card itself)
-  const photoArea = $('#photoCapture');
+  // Inline Voice capture (card itself) + fullscreen Camera + tile gallery
   const voiceArea = $('#voiceCapture');
-  let photoStream = null, videoRecorder = null, videoChunks = [], photoBlob = null, videoBlob = null, photoMode = 'photo';
+  let camStream = null, camMode = 'photo', camFacing = 'environment', camRecorder = null, camChunks = [], camPhotoBlob = null, camVideoBlob = null;
   let voiceStream = null, voiceRecorder = null, voiceChunks = [], voiceBlob = null, voiceTimer = null, voiceSec = 0;
 
-  function stopPhotoStream() { try { photoStream?.getTracks().forEach((t) => t.stop()); } catch {} photoStream = null; const v = $('#photoPreview'); if (v) v.srcObject = null; }
-  function showPhotoArea(mode = 'photo') {
-    photoMode = mode;
-    if (voiceArea) voiceArea.hidden = true;
-    if (photoArea) photoArea.hidden = false;
-    document.querySelectorAll('.capture-tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === mode));
-    const hint = $('#photoHint'); if (hint) hint.textContent = mode === 'video' ? 'Video: 10s max' : 'Allow camera or pick file';
-    startPhotoPreview();
-  }
-  async function startPhotoPreview() {
-    const video = $('#photoPreview');
-    const fileInput = $('#photoFile');
-    const shutter = $('#photoShutter');
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('no cam');
-      photoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: photoMode === 'video' });
-      if (video) { video.srcObject = photoStream; video.hidden = false; }
-      if (shutter) shutter.textContent = photoMode === 'video' ? '● Record' : 'Capture';
-      if (fileInput) fileInput.hidden = true;
-    } catch {
-      if (video) video.hidden = true;
-      if (fileInput) fileInput.hidden = false;
-      const hint = $('#photoHint'); if (hint) hint.textContent = 'Camera blocked — pick file';
+  function renderTileGallery() {
+    const gal = $('#tileGallery');
+    if (!gal) return;
+    const acts = engine.getSnapshot().store.activities.filter((a) => a.cell === selectedCell && (a.media_url || a.localUrl));
+    gal.innerHTML = '';
+    gal.hidden = acts.length === 0;
+    for (const a of acts) {
+      const url = a.media_url || a.localUrl;
+      if (!url) continue;
+      const isVideo = (a.captureType === 'video') || url.match(/\.(mp4|webm|mov)$/i);
+      let el;
+      if (isVideo) { el = document.createElement('video'); el.src = url; el.preload = 'metadata'; el.muted = true; el.playsInline = true; }
+      else { el = document.createElement('img'); el.src = url; el.alt = a.title || 'memory'; }
+      el.className = 'g-thumb';
+      el.addEventListener('click', () => openViewer(url, isVideo));
+      gal.appendChild(el);
     }
   }
-  function closePhotoArea() { stopPhotoStream(); if (photoArea) photoArea.hidden = true; photoBlob = videoBlob = null; const thumb = $('#photoThumb'); if (thumb) { thumb.hidden = true; thumb.src = ''; } $('#photoSave').hidden = true; $('#photoRetake').hidden = true; }
+  function openViewer(url, isVideo) {
+    const dlg = $('#mediaViewer');
+    const img = $('#viewerImg'), vid = $('#viewerVideo');
+    img.hidden = true; vid.hidden = true; vid.pause?.();
+    if (isVideo) { vid.src = url; vid.hidden = false; }
+    else { img.src = url; img.hidden = false; }
+    try { dlg.showModal(); } catch {}
+  }
+  $('#viewerClose')?.addEventListener('click', () => { try { $('#mediaViewer').close(); } catch {} const v = $('#viewerVideo'); v.pause?.(); v.removeAttribute('src'); v.load?.(); });
+
+  function stopCamStream() { try { camRecorder?.state === 'recording' && camRecorder.stop(); } catch {} try { camStream?.getTracks().forEach((t) => t.stop()); } catch {} camStream = null; const v = $('#camPreview'); if (v) v.srcObject = null; }
+  async function openCamera(mode = 'photo') {
+    camMode = mode; camPhotoBlob = camVideoBlob = null;
+    closeVoiceArea();
+    const dlg = $('#cameraSheet');
+    document.querySelectorAll('.cam-tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === mode));
+    const review = $('#camReview'); review.hidden = true;
+    const preview = $('#camPreview'); preview.hidden = false;
+    $('#camSave').hidden = true; $('#camRetake').hidden = true;
+    $('#camShutter').classList.remove('recording');
+    try { dlg.showModal(); } catch {}
+    await startCam();
+  }
+  async function startCam() {
+    const preview = $('#camPreview');
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('no cam');
+      camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: camFacing }, audio: camMode === 'video' });
+      preview.srcObject = camStream;
+    } catch {
+      $('#camFile').click();
+      closeCamera();
+    }
+  }
+  function closeCamera() { stopCamStream(); try { $('#cameraSheet').close(); } catch {} }
+  async function saveCamBlob() {
+    const blob = camPhotoBlob || camVideoBlob; if (!blob) return;
+    const { lat, lng } = mapView.getUserLocation();
+    const cell = cellAt(lat, lng);
+    const isVideo = blob.type.startsWith('video/');
+    const activity = engine.logActivity({ title: isVideo ? 'Video memory' : 'Photo memory', category: selectedCategory, captureType: isVideo ? 'video' : 'photo', lat, lng, cell });
+    const localUrl = URL.createObjectURL(blob);
+    activity.localUrl = localUrl;
+    try {
+      const uid = (await import('./auth.js').then((m) => m.supabase.auth.getUser())).data.user?.id;
+      const ext = blob.type.includes('webp') ? 'webp' : blob.type.includes('mp4') ? 'mp4' : isVideo ? 'webm' : 'jpg';
+      const url = await uploadMedia(`${uid}/${activity.id}.${ext}`, blob, blob.type);
+      activity.media_url = url;
+      try { localStorage.setItem('tourtle.v0.hex-progress', JSON.stringify(engine.getSnapshot().store)); } catch {}
+    } catch (e) { console.warn('[media] upload failed', e?.message || e); }
+    closeCamera(); renderTileGallery(); renderHud();
+  }
+  document.querySelectorAll('.cam-tab').forEach((t) => t.addEventListener('click', async () => {
+    camMode = t.dataset.tab;
+    document.querySelectorAll('.cam-tab').forEach((x) => x.classList.toggle('active', x === t));
+    camPhotoBlob = camVideoBlob = null;
+    $('#camReview').hidden = true; $('#camPreview').hidden = false;
+    $('#camSave').hidden = true; $('#camRetake').hidden = true;
+    stopCamStream(); await startCam();
+  }));
+  $('#camClose')?.addEventListener('click', closeCamera);
+  $('#camFlip')?.addEventListener('click', async () => { camFacing = camFacing === 'environment' ? 'user' : 'environment'; stopCamStream(); await startCam(); });
+  $('#camRetake')?.addEventListener('click', () => { camPhotoBlob = camVideoBlob = null; $('#camReview').hidden = true; $('#camPreview').hidden = false; $('#camSave').hidden = true; $('#camRetake').hidden = true; $('#camShutter').classList.remove('recording'); });
+  $('#camSave')?.addEventListener('click', saveCamBlob);
+  $('#camFile')?.addEventListener('change', async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    if (f.type.startsWith('video/')) camVideoBlob = f; else camPhotoBlob = await compressPhoto(f);
+    const rev = $('#camReview'); rev.src = URL.createObjectURL(camPhotoBlob || camVideoBlob); rev.hidden = false;
+    $('#camPreview').hidden = true; $('#camSave').hidden = false; $('#camRetake').hidden = false;
+  });
+  $('#camShutter')?.addEventListener('click', async () => {
+    const preview = $('#camPreview');
+    if (camMode === 'photo') {
+      const canvas = document.createElement('canvas');
+      canvas.width = preview.videoWidth; canvas.height = preview.videoHeight;
+      canvas.getContext('2d').drawImage(preview, 0, 0);
+      camPhotoBlob = await new Promise((r) => canvas.toBlob(r, pickPhotoMime(), 0.78));
+      camVideoBlob = null;
+      const rev = $('#camReview'); rev.src = URL.createObjectURL(camPhotoBlob); rev.hidden = false;
+      preview.hidden = true; $('#camSave').hidden = false; $('#camRetake').hidden = false;
+    } else {
+      if (camRecorder && camRecorder.state === 'recording') { camRecorder.stop(); return; }
+      camChunks = [];
+      const mime = pickVideoMime();
+      camRecorder = new MediaRecorder(camStream, mime ? { mimeType: mime } : undefined);
+      camRecorder.ondataavailable = (ev) => { if (ev.data.size) camChunks.push(ev.data); };
+      camRecorder.onstop = () => {
+        camVideoBlob = new Blob(camChunks, { type: camRecorder.mimeType || 'video/webm' });
+        const rev = $('#camReview'); rev.src = URL.createObjectURL(camVideoBlob); rev.hidden = false;
+        preview.hidden = true; $('#camSave').hidden = false; $('#camRetake').hidden = false;
+        $('#camShutter').classList.remove('recording');
+      };
+      camRecorder.start();
+      $('#camShutter').classList.add('recording');
+      setTimeout(() => { if (camRecorder?.state === 'recording') camRecorder.stop(); }, 30000);
+    }
+  });
 
   function showVoiceArea() {
-    if (photoArea) { photoArea.hidden = true; stopPhotoStream(); }
     if (voiceArea) voiceArea.hidden = false;
   }
   function closeVoiceArea() {
@@ -484,7 +572,7 @@ function bindUi() {
   document.querySelectorAll('[data-capture]').forEach((button) => {
     button.addEventListener('click', () => {
       const type = button.dataset.capture;
-      if (type === 'photo') { showPhotoArea('photo'); return; }
+      if (type === 'photo') { openCamera('photo'); return; }
       if (type === 'voice') { showVoiceArea(); return; }
       if (type === 'session') {
         const snap = engine.getSnapshot();
@@ -505,56 +593,7 @@ function bindUi() {
     });
   });
 
-  // Photo tabs + actions
-  document.querySelectorAll('.capture-tab').forEach((t) => t.addEventListener('click', () => showPhotoArea(t.dataset.tab)));
-  $('#photoClose')?.addEventListener('click', closePhotoArea);
   $('#voiceClose')?.addEventListener('click', closeVoiceArea);
-  $('#photoFile')?.addEventListener('change', async (e) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    if (f.type.startsWith('video/')) { videoBlob = f; photoBlob = null; const th = $('#photoThumb'); if (th) { th.src = URL.createObjectURL(f); th.hidden = false; } $('#photoSave').hidden = false; $('#photoRetake').hidden = false; }
-    else { photoBlob = await compressPhoto(f); const th = $('#photoThumb'); if (th) { th.src = URL.createObjectURL(photoBlob); th.hidden = false; } $('#photoSave').hidden = false; $('#photoRetake').hidden = false; }
-  });
-  $('#photoShutter')?.addEventListener('click', async () => {
-    const video = $('#photoPreview');
-    if (photoMode === 'photo') {
-      const canvas = $('#photoCanvas');
-      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-      const blob = await new Promise((r) => canvas.toBlob(r, pickPhotoMime(), 0.78));
-      photoBlob = blob; videoBlob = null;
-      const th = $('#photoThumb'); th.src = URL.createObjectURL(blob); th.hidden = false;
-      $('#photoSave').hidden = false; $('#photoRetake').hidden = false;
-    } else {
-      if (videoRecorder && videoRecorder.state === 'recording') { videoRecorder.stop(); return; }
-      videoChunks = [];
-      const mime = pickVideoMime();
-      videoRecorder = new MediaRecorder(photoStream, mime ? { mimeType: mime } : undefined);
-      videoRecorder.ondataavailable = (ev) => { if (ev.data.size) videoChunks.push(ev.data); };
-      videoRecorder.onstop = () => { videoBlob = new Blob(videoChunks, { type: videoRecorder.mimeType || 'video/webm' }); const th = $('#photoThumb'); th.src = URL.createObjectURL(videoBlob); th.hidden = false; $('#photoSave').hidden = false; $('#photoRetake').hidden = false; $('#photoShutter').textContent = '● Record'; };
-      videoRecorder.start();
-      $('#photoShutter').textContent = '■ Stop';
-      setTimeout(() => { if (videoRecorder?.state === 'recording') videoRecorder.stop(); }, 30000);
-    }
-  });
-  $('#photoRetake')?.addEventListener('click', () => { photoBlob = videoBlob = null; $('#photoThumb').hidden = true; $('#photoSave').hidden = true; $('#photoRetake').hidden = true; if (photoMode === 'photo') $('#photoShutter').textContent = 'Capture'; });
-  $('#photoSave')?.addEventListener('click', async () => {
-    const blob = photoBlob || videoBlob; if (!blob) return;
-    const { lat, lng } = mapView.getUserLocation();
-    const cell = cellAt(lat, lng);
-    const title = blob.type.startsWith('video/') ? 'Video memory' : 'Photo memory';
-    const activity = engine.logActivity({ title, category: selectedCategory, captureType: blob.type.startsWith('video/') ? 'video' : 'photo', lat, lng, cell });
-    try {
-      const uid = (await import('./auth.js').then((m) => m.supabase.auth.getUser())).data.user?.id;
-      const ext = blob.type.includes('webp') ? 'webp' : blob.type.includes('mp4') ? 'mp4' : blob.type.startsWith('video/') ? 'webm' : 'jpg';
-      const path = `${uid}/${activity.id}.${ext}`;
-      const url = await uploadMedia(path, blob, blob.type);
-      // patch activity in store with media url
-      const idx = engine.getSnapshot().store.activities.findIndex((a) => a.id === activity.id);
-      if (idx !== -1) engine.getSnapshot().store.activities[idx].media_url = url;
-      try { localStorage.setItem('tourtle.v0.hex-progress', JSON.stringify(engine.getSnapshot().store)); } catch {}
-    } catch (e) { console.warn('[media] upload failed', e?.message || e); }
-    closePhotoArea(); renderHud();
-  });
 
   // Voice recorder
   $('#voiceRec')?.addEventListener('click', async () => {

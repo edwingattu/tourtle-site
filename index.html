@@ -139,23 +139,7 @@
                 <b>Outing</b>
               </button>
             </div>
-            <div class="capture-area" id="photoCapture" hidden>
-              <div class="capture-tabs">
-                <button class="capture-tab active" data-tab="photo" type="button">Photo</button>
-                <button class="capture-tab" data-tab="video" type="button">Video</button>
-                <button class="capture-close" id="photoClose" type="button" aria-label="Close">×</button>
-              </div>
-              <video id="photoPreview" autoplay muted playsinline></video>
-              <canvas id="photoCanvas" hidden></canvas>
-              <div class="capture-actions">
-                <input id="photoFile" type="file" accept="image/*,video/*" capture="environment" hidden>
-                <button class="capture-btn" id="photoShutter" type="button">Capture</button>
-                <button class="capture-btn" id="photoRetake" type="button" hidden>Retake</button>
-                <button class="capture-btn primary" id="photoSave" type="button" hidden>Save</button>
-                <span class="capture-hint" id="photoHint">Allow camera or pick file</span>
-              </div>
-              <img id="photoThumb" hidden alt="preview">
-            </div>
+            <div class="tile-gallery" id="tileGallery" hidden></div>
             <div class="capture-area" id="voiceCapture" hidden>
               <div class="voice-bar">
                 <div class="voice-wave" id="voiceWave"></div>
@@ -233,6 +217,31 @@
     <button class="pwa-install" id="pwaInstallBtn" type="button">Install</button>
     <button class="pwa-dismiss" id="pwaDismissBtn" type="button" aria-label="Dismiss">×</button>
   </div>
+
+  <dialog class="cam-sheet" id="cameraSheet" aria-label="Camera">
+    <div class="cam-top">
+      <div class="cam-toggle" role="tablist">
+        <button class="cam-tab active" data-tab="photo" role="tab" type="button">Photo</button>
+        <button class="cam-tab" data-tab="video" role="tab" type="button">Video</button>
+      </div>
+      <button class="cam-close" id="camClose" type="button" aria-label="Close">×</button>
+    </div>
+    <video id="camPreview" autoplay muted playsinline></video>
+    <img id="camReview" hidden alt="review">
+    <div class="cam-bottom">
+      <button class="cam-flip" id="camFlip" type="button" aria-label="Flip camera">⇄</button>
+      <button class="cam-shutter" id="camShutter" type="button" aria-label="Shutter"></button>
+      <button class="cam-save" id="camSave" type="button" hidden>Save</button>
+      <button class="cam-retake" id="camRetake" type="button" hidden>↺</button>
+    </div>
+    <input id="camFile" type="file" accept="image/*,video/*" capture="environment" hidden>
+  </dialog>
+
+  <dialog class="viewer" id="mediaViewer" aria-label="Media viewer">
+    <button class="cam-close viewer-close" id="viewerClose" type="button" aria-label="Close">×</button>
+    <img id="viewerImg" hidden alt="media">
+    <video id="viewerVideo" controls playsinline hidden></video>
+  </dialog>
 
   <div class="toast" id="toast">Loading hex fog…</div>
 
