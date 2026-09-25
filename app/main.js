@@ -190,6 +190,15 @@ function selectCell(cell, { toastOnSelect = false } = {}) {
   updateAreaName(cell);
   updateCityTitle();
   updateCountdown(info.rec);
+  // Animate bar 0 → current on every tap (progress already reflects tile)
+  const bar = document.getElementById('tileProgressBar');
+  if (bar) {
+    bar.style.transition = 'none';
+    bar.style.width = '0%';
+    void bar.offsetWidth;
+    bar.style.transition = 'width 0.5s ease';
+    bar.style.width = `${pct}%`;
+  }
   if (toastOnSelect) {
     if (info.status === 'unlocked') toast('This tile is already part of your story.');
     else if (info.status === 'activated')
