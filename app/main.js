@@ -185,11 +185,65 @@ function hideNavNow() {
   if (prev) prev.hidden = true;
   if (next) next.hidden = true;
 }
+function fmtClock(s) {
+  if (!isFinite(s) || s < 0) s = 0;
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+}
 function resetViewerAudioUi() {
-  const btn = $('#viewerAudioBtn'), fill = $('#viewerAudioFill'), t = $('#viewerAudioTime');
-  btn?.classList.remove('playing');
+  try { stopViewerWave(); } catch {}
+  const fill = $('#viewerAudioFill'), t = $('#viewerAudioRemain');
   if (fill) fill.style.width = '0%';
   if (t) t.textContent = '0:00';
+}
+// Viewer waveform plumbing (module scope — survives tile switches)
+let vCtx = null, vAnalyser = null, vRaf = 0, vSrc = null, vBars = [];
+function stopViewerWave() {
+  cancelAnimationFrame(vRaf);
+  vRaf = 0;
+}
+function buildViewerBars() {
+  const wave = $('#viewerAudioWave');
+  const remain = $('#viewerAudioRemain');
+  if (!wave) return;
+  wave.innerHTML = '';
+  if (remain) wave.appendChild(remain);
+  vBars = [];
+  const w = wave.clientWidth || 280;
+  const n = Math.max(16, Math.floor(w / 5));
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement('span');
+    s.className = 'bar';
+    wave.insertBefore(s, remain);
+    vBars.push(s);
+  }
+}
+function startViewerWave(audioEl) {
+  try {
+    stopViewerWave();
+    if (!vCtx) {
+      vCtx = new (window.AudioContext || window.webkitAudioContext)();
+      vSrc = vCtx.createMediaElementSource(audioEl);
+      vAnalyser = vCtx.createAnalyser();
+      vAnalyser.fftSize = 256;
+      vSrc.connect(vAnalyser);
+      vAnalyser.connect(vCtx.destination);
+    }
+    if (vCtx.state === 'suspended') vCtx.resume().catch(() => {});
+    const data = new Uint8Array(vAnalyser.frequencyBinCount);
+    const tick = () => {
+      if (!vAnalyser) return;
+      if (!audioEl.paused) {
+        vAnalyser.getByteFrequencyData(data);
+        const n = vBars.length || 1;
+        for (let i = 0; i < vBars.length; i++) {
+          const v = data[Math.floor((i / n) * data.length * 0.7)] / 255;
+          vBars[i].style.height = `${Math.max(3, Math.round(v * 60))}px`;
+        }
+      }
+      vRaf = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch (e) { console.warn('[viewer] wave failed', e?.message || e); }
 }
 function showViewerIndex(i) {
   if (!viewerItems.length) return;
@@ -201,7 +255,15 @@ function showViewerIndex(i) {
   try { aud.pause?.(); } catch {}
   resetViewerAudioUi();
   if (kind === 'video') { vid.src = url; vid.hidden = false; }
-  else if (kind === 'audio') { aud.src = url; wrap.hidden = false; }
+  else if (kind === 'audio') {
+    aud.src = url;
+    wrap.hidden = false;
+    buildViewerBars();
+    aud.onloadedmetadata = () => {
+      const r = $('#viewerAudioRemain');
+      if (r && aud.duration) r.textContent = fmtClock(aud.duration);
+    };
+  }
   else { img.src = url; img.hidden = false; }
   // Arrows flash for 1s; tap media to bring back
   pokeNav();
@@ -549,22 +611,35 @@ function bindUi() {
     const prev = $('#viewerPrev');
     if (prev && !prev.hidden) hideNavNow(); else pokeNav();
   });
-  // Custom audio player: play/pause + seekable track + timer (no native UI)
+  // Gallery voice player: wave window + seek + Play/Pause/Stop, remain counts down
   {
-    const aud = $('#viewerAudio'), btn = $('#viewerAudioBtn'), track = $('#viewerAudioTrack'), fill = $('#viewerAudioFill'), t = $('#viewerAudioTime');
-    const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-    btn?.addEventListener('click', (e) => {
+    const aud = $('#viewerAudio'), track = $('#viewerAudioTrack'), fill = $('#viewerAudioFill'), remain = $('#viewerAudioRemain');
+    $('#viewerAudioPlay')?.addEventListener('click', (e) => {
       e.stopPropagation();
       if (!aud?.src) return;
-      if (aud.paused) aud.play().catch(() => {}); else aud.pause();
+      aud.play().catch(() => {});
+      startViewerWave(aud);
     });
-    aud?.addEventListener('play', () => btn?.classList.add('playing'));
-    aud?.addEventListener('pause', () => btn?.classList.remove('playing'));
-    aud?.addEventListener('ended', () => { btn?.classList.remove('playing'); if (fill) fill.style.width = '0%'; });
+    $('#viewerAudioPause')?.addEventListener('click', (e) => { e.stopPropagation(); aud?.pause(); });
+    $('#viewerAudioStop')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!aud) return;
+      aud.pause();
+      aud.currentTime = 0;
+      stopViewerWave();
+      if (fill) fill.style.width = '0%';
+      if (remain && aud.duration) remain.textContent = fmtClock(aud.duration);
+    });
+    aud?.addEventListener('pause', () => stopViewerWave());
+    aud?.addEventListener('ended', () => {
+      stopViewerWave();
+      if (fill) fill.style.width = '0%';
+      if (remain) remain.textContent = '0:00';
+    });
     aud?.addEventListener('timeupdate', () => {
       if (!aud.duration) return;
       if (fill) fill.style.width = `${(aud.currentTime / aud.duration) * 100}%`;
-      if (t) t.textContent = fmt(aud.currentTime);
+      if (remain) remain.textContent = fmtClock(aud.duration - aud.currentTime);
     });
     track?.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -742,12 +817,15 @@ function bindUi() {
       if (playCtx.state === 'suspended') playCtx.resume().catch(() => {});
       const data = new Uint8Array(playAnalyser.frequencyBinCount);
       const tick = () => {
-        if (!playAnalyser || audioEl.paused) return;
-        playAnalyser.getByteFrequencyData(data);
-        const n = waveBars.length || 1;
-        for (let i = 0; i < waveBars.length; i++) {
-          const v = data[Math.floor((i / n) * data.length * 0.7)] / 255;
-          waveBars[i].style.height = `${Math.max(3, Math.round(v * 26))}px`;
+        if (!playAnalyser) return;
+        // Keep the loop alive across the play() async gap; only sample while sounding
+        if (!audioEl.paused) {
+          playAnalyser.getByteFrequencyData(data);
+          const n = waveBars.length || 1;
+          for (let i = 0; i < waveBars.length; i++) {
+            const v = data[Math.floor((i / n) * data.length * 0.7)] / 255;
+            waveBars[i].style.height = `${Math.max(3, Math.round(v * 26))}px`;
+          }
         }
         playRaf = requestAnimationFrame(tick);
       };

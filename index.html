@@ -244,9 +244,13 @@
     <img id="viewerImg" hidden alt="media">
     <video id="viewerVideo" controls playsinline hidden></video>
     <div class="audio-player" id="viewerAudioWrap" hidden>
-      <button class="audio-play" id="viewerAudioBtn" type="button" aria-label="Play"></button>
+      <div class="audio-wave" id="viewerAudioWave"><span class="audio-remain" id="viewerAudioRemain">0:00</span></div>
       <div class="audio-track" id="viewerAudioTrack"><span id="viewerAudioFill"></span></div>
-      <span class="audio-time" id="viewerAudioTime">0:00</span>
+      <div class="audio-controls">
+        <button class="audio-btn" id="viewerAudioPlay" type="button">Play</button>
+        <button class="audio-btn" id="viewerAudioPause" type="button">Pause</button>
+        <button class="audio-btn" id="viewerAudioStop" type="button">Stop</button>
+      </div>
       <audio id="viewerAudio" hidden></audio>
     </div>
   </dialog>

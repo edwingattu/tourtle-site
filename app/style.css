@@ -1435,34 +1435,51 @@ button {
 
 .audio-player[hidden] { display: none !important; }
 
-.audio-play {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  border: 0;
+.audio-wave {
+  position: relative;
+  width: 100%;
+  height: 96px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.12);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 12px;
+  overflow: hidden;
+}
+
+.audio-wave span.bar {
+  width: 3px;
+  min-height: 3px;
+  height: 4px;
+  border-radius: 2px;
   background: #fff;
-  display: grid;
-  place-items: center;
+  flex: none;
+}
+
+.audio-remain {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  color: #fff;
+  font: 700 11px "DM Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.audio-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.audio-btn {
+  border: 1px solid rgba(255,255,255,0.4);
+  background: transparent;
+  color: #fff;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
-}
-
-.audio-play::before {
-  content: '';
-  width: 0;
-  height: 0;
-  border-left: 22px solid #000;
-  border-top: 14px solid transparent;
-  border-bottom: 14px solid transparent;
-  margin-left: 5px;
-}
-
-.audio-play.playing::before {
-  width: 20px;
-  height: 22px;
-  border: 0;
-  margin-left: 0;
-  background: linear-gradient(#000 0 0) left/7px 100% no-repeat,
-    linear-gradient(#000 0 0) right/7px 100% no-repeat;
 }
 
 .audio-track {
