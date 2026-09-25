@@ -92,64 +92,26 @@
         </div>
 
         <div class="detail-content" id="detailContent">
-          <div class="content-header">
-            <h1>Your World</h1>
-          </div>
-
-          <div class="stat-grid">
-            <div class="stat-card streak-card">
-              <div class="stat-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-4-2-5-.5 1.5-1.5 2.5-3 3 .5-3-1-7-2-9-2 3-6 7-6 11a7 7 0 0 0 6 7z"/></svg>
-              </div>
-              <div>
-                <p class="stat-value" id="streakCount">0</p>
-                <p class="stat-label">Day streak</p>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon mint">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-              </div>
-              <div>
-                <p class="stat-value" id="unlockedCount">0</p>
-                <p class="stat-label">Tiles unlocked</p>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon coral">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
-              </div>
-              <div>
-                <p class="stat-value" id="coveragePercent">0%</p>
-                <p class="stat-label">Local coverage</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="section-block">
-            <div class="progress-row" style="font-size: 13px; font-weight: 700; margin-bottom: 10px; color: var(--ink);">
-              <span>Hex coverage near your base</span>
-              <span id="todayProgress">0%</span>
-            </div>
-            <div class="progress-track dark" style="height: 10px; margin-bottom: 24px;">
-              <span id="coverageBar"></span>
-            </div>
-
+          <div class="section-block" id="unlockingSection">
             <div class="section-heading">
-              <h2>How unlocking works</h2>
+              <h2>Unlocking a Tile</h2>
             </div>
-            <div class="next-unlock-card">
-              <div class="mini-hex">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            <div class="unlocking-content" id="unlockingContent">
+              <div class="next-unlock-card">
+                <div class="mini-hex">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                </div>
+                <div class="unlock-copy">
+                  <h3>Dwell or Activity</h3>
+                  <p>You unlock a tile with just 3 minutes of your physical presence. Alternatively, if you log an activity where you are, that too can boost you towards unlocking the tile. Once a tile is unlocked its neighbouring tiles are "Activated". More to explore!</p>
+                </div>
               </div>
-              <div class="unlock-copy">
-                <h3>Dwell or Activity</h3>
-                <p>Each hex is an H3 cell over the real street. Three minutes of cumulative dwell, or an Activity boost, flips it to Unlocked. Neighbors then activate.</p>
-              </div>
-              <button class="arrow-button" id="leaderboardButton" type="button" aria-label="About the leaderboard">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-              </button>
+              <button class="understood-button" id="understoodBtn" type="button">Understood</button>
             </div>
+            <button class="collapsed-bar" id="collapsedBar" hidden type="button">
+              <span>What is Tourtle?</span>
+              <span class="info-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span>
+            </button>
           </div>
 
           <div class="section-block">

@@ -733,6 +733,46 @@ button {
   line-height: 1.45;
 }
 
+.understood-button {
+  margin-top: 16px;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 16px;
+  background: var(--navy);
+  color: #fff;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.collapsed-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.collapsed-bar[hidden] { display: none !important; }
+
+.collapsed-bar .info-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+}
+
+.unlocking-content[hidden] { display: none !important; }
+
 .dark {
   background: #cbdcec;
 }

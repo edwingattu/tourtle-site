@@ -395,9 +395,25 @@ function bindUi() {
     const info = mapView.inspectCell(snap.store, selectedCell);
     toast(`${info.status} · H3 ${info.cell} · ${progressPercent(info.rec)}% dwell`);
   });
-  $('#leaderboardButton').addEventListener('click', () => {
+  $('#leaderboardButton')?.addEventListener('click', () => {
     toast('Pilot leaderboard stays private to invited testers.');
   });
+  // Unlocking section collapse
+  const unlockingContent = $('#unlockingContent');
+  const collapsedBar = $('#collapsedBar');
+  const understoodBtn = $('#understoodBtn');
+  const UNDERSTOOD_KEY = 'tourtle.v0.unlockingDismissed';
+  const setUnlockingCollapsed = (collapsed) => {
+    if (!unlockingContent || !collapsedBar) return;
+    unlockingContent.hidden = collapsed;
+    collapsedBar.hidden = !collapsed;
+    try { localStorage.setItem(UNDERSTOOD_KEY, collapsed ? '1' : ''); } catch {}
+  };
+  try {
+    if (localStorage.getItem(UNDERSTOOD_KEY) === '1') setUnlockingCollapsed(true);
+  } catch {}
+  understoodBtn?.addEventListener('click', () => setUnlockingCollapsed(true));
+  collapsedBar?.addEventListener('click', () => setUnlockingCollapsed(false));
   $('#profileButton').addEventListener('click', async () => {
     const email = currentUser?.email || 'Signed in';
     if (window.confirm(`${email}\n\nPersonal territory is never shared by default.\n\nOK = stay signed in\nCancel = sign out`)) {
