@@ -403,6 +403,8 @@ export function createEngine() {
           cell: r.h3_cell,
           createdAt: Date.parse(r.created_at),
           tiles: r.tiles || [],
+          media_url: r.media_url || null,
+          media_type: r.media_type || null,
         });
         added = true;
       }

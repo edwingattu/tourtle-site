@@ -104,12 +104,28 @@ export async function flush(engine) {
         lng: a.lng,
         h3_cell: a.cell,
         tiles: a.tiles || [],
+        media_url: a.media_url || null,
+        media_type: a.captureType || null,
         created_at: new Date(a.createdAt).toISOString(),
       }));
       const { error } = await supabase.from('activities').upsert(rows, { onConflict: 'id' });
       if (error) throw error;
       const newest = Math.max(...fresh.map((a) => a.createdAt));
       engine.setActivityCursor(new Date(newest).toISOString());
+    }
+
+    // Media backfill: activities already flushed before their upload finished
+    // get their media_url patched (partial upsert by id).
+    const withMedia = snap.store.activities.filter((a) => !a.sandbox && a.media_url);
+    if (withMedia.length) {
+      const rows = withMedia.map((a) => ({
+        id: a.id,
+        user_id: uid,
+        media_url: a.media_url,
+        media_type: a.captureType || null,
+      }));
+      const { error } = await supabase.from('activities').upsert(rows, { onConflict: 'id' });
+      if (error) console.warn('[sync] media backfill failed:', error.message);
     }
 
     // 3. Profile: base, streak, and the live outing (mid-outing sync rides

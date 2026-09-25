@@ -154,6 +154,42 @@ function updateCountdown(rec) {
   }
 }
 
+// Per-tile media gallery: module scope so renderHud/selectCell can refresh it
+// on every tile change (bindUi-local defs are invisible here).
+function openViewer(url, isVideo) {
+  const dlg = $('#mediaViewer');
+  if (!dlg) return;
+  const img = $('#viewerImg'), vid = $('#viewerVideo');
+  img.hidden = true; vid.hidden = true;
+  try { vid.pause?.(); } catch {}
+  if (isVideo) { vid.src = url; vid.hidden = false; }
+  else { img.src = url; img.hidden = false; }
+  try { dlg.showModal(); } catch {}
+}
+
+function renderTileGallery() {
+  const gal = $('#tileGallery');
+  if (!gal) return;
+  const acts = engine.getSnapshot().store.activities.filter((a) => a.cell === selectedCell && (a.media_url || a.localUrl));
+  gal.innerHTML = '';
+  gal.hidden = acts.length === 0;
+  for (const a of acts) {
+    const url = a.media_url || a.localUrl;
+    if (!url) continue;
+    const isVideo = (a.captureType === 'video') || /\.(mp4|webm|mov)$/i.test(url.split('?')[0]);
+    let el;
+    if (isVideo) { el = document.createElement('video'); el.src = url; el.preload = 'metadata'; el.muted = true; el.playsInline = true; }
+    else {
+      el = document.createElement('img'); el.alt = a.title || 'memory';
+      el.addEventListener('error', () => { el.style.opacity = '0.25'; });
+      el.src = url;
+    }
+    el.className = 'g-thumb';
+    el.addEventListener('click', () => openViewer(url, isVideo));
+    gal.appendChild(el);
+  }
+}
+
 async function placeName(lat, lng) {
   const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
   if (placeCache.has(key)) return placeCache.get(key);
@@ -439,32 +475,6 @@ function bindUi() {
   let camStream = null, camMode = 'photo', camFacing = 'environment', camRecorder = null, camChunks = [], camPhotoBlob = null, camVideoBlob = null;
   let voiceStream = null, voiceRecorder = null, voiceChunks = [], voiceBlob = null, voiceTimer = null, voiceSec = 0;
 
-  function renderTileGallery() {
-    const gal = $('#tileGallery');
-    if (!gal) return;
-    const acts = engine.getSnapshot().store.activities.filter((a) => a.cell === selectedCell && (a.media_url || a.localUrl));
-    gal.innerHTML = '';
-    gal.hidden = acts.length === 0;
-    for (const a of acts) {
-      const url = a.media_url || a.localUrl;
-      if (!url) continue;
-      const isVideo = (a.captureType === 'video') || url.match(/\.(mp4|webm|mov)$/i);
-      let el;
-      if (isVideo) { el = document.createElement('video'); el.src = url; el.preload = 'metadata'; el.muted = true; el.playsInline = true; }
-      else { el = document.createElement('img'); el.src = url; el.alt = a.title || 'memory'; }
-      el.className = 'g-thumb';
-      el.addEventListener('click', () => openViewer(url, isVideo));
-      gal.appendChild(el);
-    }
-  }
-  function openViewer(url, isVideo) {
-    const dlg = $('#mediaViewer');
-    const img = $('#viewerImg'), vid = $('#viewerVideo');
-    img.hidden = true; vid.hidden = true; vid.pause?.();
-    if (isVideo) { vid.src = url; vid.hidden = false; }
-    else { img.src = url; img.hidden = false; }
-    try { dlg.showModal(); } catch {}
-  }
   $('#viewerClose')?.addEventListener('click', () => { try { $('#mediaViewer').close(); } catch {} const v = $('#viewerVideo'); v.pause?.(); v.removeAttribute('src'); v.load?.(); });
 
   function stopCamStream() { try { camRecorder?.state === 'recording' && camRecorder.stop(); } catch {} try { camStream?.getTracks().forEach((t) => t.stop()); } catch {} camStream = null; const v = $('#camPreview'); if (v) v.srcObject = null; }
