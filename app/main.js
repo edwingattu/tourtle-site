@@ -158,6 +158,9 @@ function updateCountdown(rec) {
 // on every tile change (bindUi-local defs are invisible here).
 let viewerItems = [];
 let viewerIndex = 0;
+let navTimer = 0;
+// While the voice recorder is open the gallery stays hidden (returns on save/close)
+let voiceCaptureOpen = false;
 const VOICE_SVG = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg>';
 function mediaKind(a, url) {
   if (a.captureType === 'video') return 'video';
@@ -167,21 +170,41 @@ function mediaKind(a, url) {
   if (['m4a', 'mp3', 'wav', 'ogg', 'aac', 'opus'].includes(ext)) return 'audio';
   return 'image';
 }
+function pokeNav() {
+  const multi = viewerItems.length > 1;
+  const prev = $('#viewerPrev'), next = $('#viewerNext');
+  if (!multi) { if (prev) prev.hidden = true; if (next) next.hidden = true; return; }
+  if (prev) prev.hidden = false;
+  if (next) next.hidden = false;
+  clearTimeout(navTimer);
+  navTimer = setTimeout(() => { if (prev) prev.hidden = true; if (next) next.hidden = true; }, 1000);
+}
+function hideNavNow() {
+  clearTimeout(navTimer);
+  const prev = $('#viewerPrev'), next = $('#viewerNext');
+  if (prev) prev.hidden = true;
+  if (next) next.hidden = true;
+}
+function resetViewerAudioUi() {
+  const btn = $('#viewerAudioBtn'), fill = $('#viewerAudioFill'), t = $('#viewerAudioTime');
+  btn?.classList.remove('playing');
+  if (fill) fill.style.width = '0%';
+  if (t) t.textContent = '0:00';
+}
 function showViewerIndex(i) {
   if (!viewerItems.length) return;
   viewerIndex = (i + viewerItems.length) % viewerItems.length;
   const { url, kind } = viewerItems[viewerIndex];
-  const img = $('#viewerImg'), vid = $('#viewerVideo'), aud = $('#viewerAudio');
-  img.hidden = true; vid.hidden = true; aud.hidden = true;
+  const img = $('#viewerImg'), vid = $('#viewerVideo'), wrap = $('#viewerAudioWrap'), aud = $('#viewerAudio');
+  img.hidden = true; vid.hidden = true; wrap.hidden = true;
   try { vid.pause?.(); } catch {}
   try { aud.pause?.(); } catch {}
+  resetViewerAudioUi();
   if (kind === 'video') { vid.src = url; vid.hidden = false; }
-  else if (kind === 'audio') { aud.src = url; aud.hidden = false; }
+  else if (kind === 'audio') { aud.src = url; wrap.hidden = false; }
   else { img.src = url; img.hidden = false; }
-  const multi = viewerItems.length > 1;
-  const prev = $('#viewerPrev'), next = $('#viewerNext');
-  if (prev) prev.hidden = !multi;
-  if (next) next.hidden = !multi;
+  // Arrows flash for 1s; tap media to bring back
+  pokeNav();
 }
 function openViewer(url) {
   const dlg = $('#mediaViewer');
@@ -194,6 +217,7 @@ function openViewer(url) {
 function renderTileGallery() {
   const gal = $('#tileGallery');
   if (!gal) return;
+  if (voiceCaptureOpen) { gal.hidden = true; return; }
   const acts = engine.getSnapshot().store.activities.filter((a) => a.cell === selectedCell && (a.media_url || a.localUrl));
   gal.innerHTML = '';
   gal.hidden = acts.length === 0;
@@ -516,6 +540,39 @@ function bindUi() {
   $('#viewerClose')?.addEventListener('click', () => { try { $('#mediaViewer').close(); } catch {} const v = $('#viewerVideo'); v.pause?.(); v.removeAttribute('src'); v.load?.(); const au = $('#viewerAudio'); au.pause?.(); au.removeAttribute('src'); });
   $('#viewerPrev')?.addEventListener('click', (e) => { e.stopPropagation(); showViewerIndex(viewerIndex - 1); });
   $('#viewerNext')?.addEventListener('click', (e) => { e.stopPropagation(); showViewerIndex(viewerIndex + 1); });
+  // Tap media toggles arrows (they auto-hide 1s after open)
+  $('#viewerImg')?.addEventListener('click', () => {
+    const prev = $('#viewerPrev');
+    if (prev && !prev.hidden) hideNavNow(); else pokeNav();
+  });
+  $('#viewerVideo')?.addEventListener('click', () => {
+    const prev = $('#viewerPrev');
+    if (prev && !prev.hidden) hideNavNow(); else pokeNav();
+  });
+  // Custom audio player: play/pause + seekable track + timer (no native UI)
+  {
+    const aud = $('#viewerAudio'), btn = $('#viewerAudioBtn'), track = $('#viewerAudioTrack'), fill = $('#viewerAudioFill'), t = $('#viewerAudioTime');
+    const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    btn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!aud?.src) return;
+      if (aud.paused) aud.play().catch(() => {}); else aud.pause();
+    });
+    aud?.addEventListener('play', () => btn?.classList.add('playing'));
+    aud?.addEventListener('pause', () => btn?.classList.remove('playing'));
+    aud?.addEventListener('ended', () => { btn?.classList.remove('playing'); if (fill) fill.style.width = '0%'; });
+    aud?.addEventListener('timeupdate', () => {
+      if (!aud.duration) return;
+      if (fill) fill.style.width = `${(aud.currentTime / aud.duration) * 100}%`;
+      if (t) t.textContent = fmt(aud.currentTime);
+    });
+    track?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!aud?.duration) return;
+      const r = track.getBoundingClientRect();
+      aud.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * aud.duration;
+    });
+  }
   {
     // Swipe between gallery items in the viewer
     let touchX = null;
@@ -619,18 +676,23 @@ function bindUi() {
   });
 
   function showVoiceArea() {
+    voiceCaptureOpen = true;
+    const gal = $('#tileGallery'); if (gal) gal.hidden = true;
     if (voiceArea) voiceArea.hidden = false;
   }
   function closeVoiceArea() {
     try { stopWave(); } catch {}
+    try { stopPlayWave(); } catch {}
     try { voiceRecorder?.state !== 'inactive' && voiceRecorder.stop(); } catch {}
     try { voiceStream?.getTracks().forEach((t) => t.stop()); } catch {}
     voiceStream = null; voiceBlob = null;
     clearInterval(voiceTimer); voiceSec = 0;
     const t = $('#voiceTimer'); if (t) t.textContent = '0:00';
-    const a = $('#voiceAudio'); if (a) { a.hidden = true; a.src = ''; }
+    const a = $('#voiceAudio'); if (a) { try { a.pause(); } catch {} a.removeAttribute('src'); }
     $('#voiceSave').hidden = true; $('#voicePlay').hidden = true; $('#voiceStop').hidden = true;
     if (voiceArea) voiceArea.hidden = true;
+    voiceCaptureOpen = false;
+    try { renderTileGallery(); } catch {}
   }
 
   document.querySelectorAll('[data-capture]').forEach((button) => {
@@ -661,6 +723,37 @@ function bindUi() {
 
   // Voice recorder (+ live waveform via AnalyserNode)
   let waveCtx = null, waveAnalyser = null, waveRaf = 0, waveBars = [];
+  let playCtx = null, playAnalyser = null, playRaf = 0, playSrc = null;
+  function stopPlayWave() {
+    cancelAnimationFrame(playRaf);
+    playRaf = 0;
+  }
+  function startPlayWave(audioEl) {
+    try {
+      stopPlayWave();
+      if (!playCtx) {
+        playCtx = new (window.AudioContext || window.webkitAudioContext)();
+        playSrc = playCtx.createMediaElementSource(audioEl);
+        playAnalyser = playCtx.createAnalyser();
+        playAnalyser.fftSize = 256;
+        playSrc.connect(playAnalyser);
+        playAnalyser.connect(playCtx.destination);
+      }
+      if (playCtx.state === 'suspended') playCtx.resume().catch(() => {});
+      const data = new Uint8Array(playAnalyser.frequencyBinCount);
+      const tick = () => {
+        if (!playAnalyser || audioEl.paused) return;
+        playAnalyser.getByteFrequencyData(data);
+        const n = waveBars.length || 1;
+        for (let i = 0; i < waveBars.length; i++) {
+          const v = data[Math.floor((i / n) * data.length * 0.7)] / 255;
+          waveBars[i].style.height = `${Math.max(3, Math.round(v * 26))}px`;
+        }
+        playRaf = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (e) { console.warn('[voice] play wave failed', e?.message || e); }
+  }
   function buildWaveBars() {
     const wave = $('#voiceWave');
     if (!wave) return;
@@ -726,7 +819,14 @@ function bindUi() {
     } catch (e) { console.warn('[voice] mic denied', e?.message || e); }
   });
   $('#voiceStop')?.addEventListener('click', () => { try { voiceRecorder.stop(); } catch {} $('#voiceStop').hidden = true; $('#voiceRec').hidden = false; voiceStream?.getTracks().forEach((t) => t.stop()); clearInterval(voiceTimer); stopWave(); });
-  $('#voicePlay')?.addEventListener('click', () => { const a = $('#voiceAudio'); if (a) a.play(); });
+  $('#voicePlay')?.addEventListener('click', () => {
+    const a = $('#voiceAudio');
+    if (!a) return;
+    if (a.paused) { a.play().catch(() => {}); startPlayWave(a); }
+    else { a.pause(); stopPlayWave(); }
+  });
+  $('#voiceAudio')?.addEventListener('pause', () => stopPlayWave());
+  $('#voiceAudio')?.addEventListener('ended', () => stopPlayWave());
   $('#voiceSave')?.addEventListener('click', async () => {
     if (!voiceBlob) return;
     const { lat, lng } = mapView.getUserLocation();

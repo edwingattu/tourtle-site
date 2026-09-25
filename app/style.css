@@ -1419,15 +1419,74 @@ button {
 
 #viewerImg[hidden], #viewerVideo[hidden] { display: none !important; }
 
-#viewerAudio {
+#viewerAudio[hidden] { display: none !important; }
+
+.audio-player {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
   width: min(320px, 86vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
 }
 
-#viewerAudio[hidden] { display: none !important; }
+.audio-player[hidden] { display: none !important; }
+
+.audio-play {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 0;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.audio-play::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 22px solid #000;
+  border-top: 14px solid transparent;
+  border-bottom: 14px solid transparent;
+  margin-left: 5px;
+}
+
+.audio-play.playing::before {
+  width: 20px;
+  height: 22px;
+  border: 0;
+  margin-left: 0;
+  background: linear-gradient(#000 0 0) left/7px 100% no-repeat,
+    linear-gradient(#000 0 0) right/7px 100% no-repeat;
+}
+
+.audio-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.25);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.audio-track span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: #fff;
+  border-radius: inherit;
+}
+
+.audio-time {
+  color: #fff;
+  font: 700 12px "DM Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
 
 /* Location gate */
 .gate-dialog {

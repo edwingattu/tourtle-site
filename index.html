@@ -139,7 +139,6 @@
                 <b>Outing</b>
               </button>
             </div>
-            <div class="tile-gallery" id="tileGallery" hidden></div>
             <div class="capture-area" id="voiceCapture" hidden>
               <div class="voice-bar">
                 <div class="voice-wave" id="voiceWave"></div>
@@ -148,12 +147,13 @@
               <div class="capture-actions">
                 <button class="capture-btn" id="voiceRec" type="button">● Record</button>
                 <button class="capture-btn" id="voiceStop" type="button" hidden>■ Stop</button>
-                <button class="capture-btn" id="voicePlay" type="button" hidden>▶ Play</button>
+                <button class="capture-btn" id="voicePlay" type="button" hidden>Play</button>
                 <button class="capture-btn primary" id="voiceSave" type="button" hidden>Save</button>
                 <button class="capture-btn" id="voiceClose" type="button">Close</button>
               </div>
-              <audio id="voiceAudio" controls hidden></audio>
+              <audio id="voiceAudio" hidden></audio>
             </div>
+            <div class="tile-gallery" id="tileGallery" hidden></div>
           </div>
 
           <div class="section-block leaderboard-block">
@@ -243,7 +243,12 @@
     <button class="viewer-nav next" id="viewerNext" type="button" aria-label="Next">›</button>
     <img id="viewerImg" hidden alt="media">
     <video id="viewerVideo" controls playsinline hidden></video>
-    <audio id="viewerAudio" controls hidden></audio>
+    <div class="audio-player" id="viewerAudioWrap" hidden>
+      <button class="audio-play" id="viewerAudioBtn" type="button" aria-label="Play"></button>
+      <div class="audio-track" id="viewerAudioTrack"><span id="viewerAudioFill"></span></div>
+      <span class="audio-time" id="viewerAudioTime">0:00</span>
+      <audio id="viewerAudio" hidden></audio>
+    </div>
   </dialog>
 
   <div class="toast" id="toast">Loading hex fog…</div>
