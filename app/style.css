@@ -991,6 +991,46 @@ button {
   max-width: min(520px, calc(100% - 24px));
 }
 
+.pwa-banner {
+  position: fixed;
+  z-index: 9;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #173668;
+  color: #fff;
+  padding: 10px 12px 10px 16px;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(15,64,54,0.22);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pwa-banner[hidden] { display: none; }
+
+.pwa-install {
+  margin-left: auto;
+  border: 0;
+  background: #fff;
+  color: #173668;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.pwa-dismiss {
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 6px;
+}
+
 .toast.visible {
   transform: translate(-50%, 0);
   opacity: 1;

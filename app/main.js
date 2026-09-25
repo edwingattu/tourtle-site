@@ -337,14 +337,32 @@ function bindUi() {
     }
   });
 
-  // PWA install prompt (deferred)
+  // PWA install prompt (deferred) — show banner when ready
   let deferredPrompt = null;
+  const pwaBanner = $('#pwaBanner');
+  const pwaInstallBtn = $('#pwaInstallBtn');
+  const pwaDismissBtn = $('#pwaDismissBtn');
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
-    // subtle cue after gate: could show banner here if desired
+    if (!isStandalone && pwaBanner && !localStorage.getItem('tourtle.pwa.dismissed')) {
+      pwaBanner.hidden = false;
+    }
     console.log('[pwa] install prompt ready');
   });
+  pwaInstallBtn?.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    try { await deferredPrompt.userChoice; } catch {}
+    deferredPrompt = null;
+    if (pwaBanner) pwaBanner.hidden = true;
+  });
+  pwaDismissBtn?.addEventListener('click', () => {
+    if (pwaBanner) pwaBanner.hidden = true;
+    try { localStorage.setItem('tourtle.pwa.dismissed', '1'); } catch {}
+  });
+  // iOS has no beforeinstallprompt — banner never shows; user uses Share → Add to Home Screen
 
   $('#trackingButton').addEventListener('click', () => setTracking(!tracking));
   $('#recenterButton').addEventListener('click', () => {
