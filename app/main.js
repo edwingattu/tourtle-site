@@ -148,7 +148,7 @@ function updateCountdown(rec) {
   } else {
     const left = remainingMs(rec);
     const mmss = formatCountdown(left);
-    textEl.innerHTML = `Current Tile Unlocks in <b id="countdown">${mmss}</b>`;
+    textEl.innerHTML = `Current Tile Unlocks in <b id="countdown">${mmss} mins</b>`;
     iconEl.innerHTML = LOCK_SVG;
   }
 }
