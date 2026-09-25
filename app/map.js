@@ -617,6 +617,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           ['get', 'status'],
           'unlocked',
           0,
+          'mastered',
+          0.7,
           0.62,
         ],
         'fill-opacity-transition': { duration: 300, delay: 0 },
