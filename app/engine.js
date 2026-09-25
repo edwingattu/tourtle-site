@@ -424,6 +424,7 @@ export function createEngine(userId = null) {
           tiles: r.tiles || [],
           media_url: r.media_url || null,
           media_type: r.media_type || null,
+          media_path: r.media_path || null,
         });
         added = true;
       }

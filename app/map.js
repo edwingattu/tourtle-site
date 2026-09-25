@@ -294,10 +294,10 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       statuses = new Array(cells.length).fill('unclaimed');
     } else if (res === CONFIG.h3Resolution) {
       const neighborSet = unlockedNeighborSet(store);
-      // Mastered = unlocked + stored media (photo/video/voice with a url)
+      // Mastered = unlocked + stored media (blob, path, or legacy url)
       const mediaCells = new Set();
       for (const a of store.activities || []) {
-        if (a.cell && (a.media_url || a.localUrl)) mediaCells.add(a.cell);
+        if (a.cell && (a.localUrl || a.media_path || a.media_url)) mediaCells.add(a.cell);
       }
       statuses = new Array(cells.length);
       for (let i = 0; i < cells.length; i++) {

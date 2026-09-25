@@ -14,7 +14,7 @@ import { setupJoystick } from './joystick.js';
 import { regionCenter, regionCredit, regionForPoint, savedRegion, setRegion } from './areas.js';
 import * as areasDbg from './areas.js';
 import { isAdmin, isSuperadmin } from './roles.js';
-import { compressPhoto, flushMediaOutbox, mediaOutbox, pickAudioMime, pickPhotoMime, pickVideoMime, uploadMedia } from './media.js';
+import { compressPhoto, flushMediaOutbox, hasMedia, mediaOutbox, pathFromActivity, pickAudioMime, pickPhotoMime, pickVideoMime, signedUrl, uploadMedia } from './media.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -304,42 +304,55 @@ function openViewer(url) {
   showViewerIndex(idx >= 0 ? idx : 0);
 }
 
-function renderTileGallery() {
+let galleryToken = 0;
+async function renderTileGallery() {
   const gal = $('#tileGallery');
   if (!gal) return;
   if (voiceCaptureOpen) { gal.hidden = true; return; }
-  const acts = engine.getSnapshot().store.activities.filter((a) => a.cell === selectedCell && (a.media_url || a.localUrl));
-  gal.innerHTML = '';
-  gal.hidden = acts.length === 0;
-  viewerItems = acts
-    .map((a) => {
-      const url = a.media_url || a.localUrl;
-      if (!url) return null;
-      return { url, kind: mediaKind(a, url) };
-    })
-    .filter(Boolean);
-  for (const a of acts) {
-    const url = a.media_url || a.localUrl;
-    if (!url) continue;
-    const kind = mediaKind(a, url);
-    let el;
-    if (kind === 'video') { el = document.createElement('video'); el.src = url; el.preload = 'metadata'; el.muted = true; el.playsInline = true; }
-    else if (kind === 'audio') {
-      el = document.createElement('button');
-      el.type = 'button';
-      el.setAttribute('aria-label', 'Play voice note');
-      el.innerHTML = VOICE_SVG;
-      el.className = 'g-thumb voice-thumb';
+  const my = ++galleryToken;
+  try {
+    const acts = engine.getSnapshot().store.activities.filter((a) => a.cell === selectedCell && hasMedia(a));
+    // Resolve view URLs: same-session blob first (instant + private), else a
+    // fresh signed URL from the stored path (never persisted).
+    const items = [];
+    for (const a of acts) {
+      let url = a.localUrl || null;
+      if (!url) {
+        const p = pathFromActivity(a);
+        if (!p) continue;
+        try {
+          url = await signedUrl(p);
+        } catch {
+          continue;
+        }
+        if (my !== galleryToken) return;
+      }
+      items.push({ url, kind: mediaKind(a, url) });
     }
-    else {
-      el = document.createElement('img'); el.alt = a.title || 'memory';
-      el.addEventListener('error', () => { el.style.opacity = '0.25'; });
-      el.src = url;
+    if (my !== galleryToken) return;
+    viewerItems = items;
+    gal.innerHTML = '';
+    gal.hidden = items.length === 0;
+    for (const { url, kind } of items) {
+      let el;
+      if (kind === 'video') { el = document.createElement('video'); el.src = url; el.preload = 'metadata'; el.muted = true; el.playsInline = true; }
+      else if (kind === 'audio') {
+        el = document.createElement('button');
+        el.type = 'button';
+        el.setAttribute('aria-label', 'Play voice note');
+        el.innerHTML = VOICE_SVG;
+        el.className = 'g-thumb voice-thumb';
+      }
+      else {
+        el = document.createElement('img'); el.alt = 'memory';
+        el.addEventListener('error', () => { el.style.opacity = '0.25'; });
+        el.src = url;
+      }
+      if (kind !== 'audio') el.className = 'g-thumb';
+      el.addEventListener('click', () => openViewer(url));
+      gal.appendChild(el);
     }
-    if (kind !== 'audio') el.className = 'g-thumb';
-    el.addEventListener('click', () => openViewer(url));
-    gal.appendChild(el);
-  }
+  } catch (e) { console.warn('[gallery] render failed:', e?.message || e); }
 }
 
 async function placeName(lat, lng) {
@@ -373,7 +386,7 @@ async function placeName(lat, lng) {
 function isMasteredCell(store, cell) {
   const rec = store.tiles[cell];
   if (!isUnlocked(rec)) return false;
-  return (store.activities || []).some((a) => a.cell === cell && (a.media_url || a.localUrl));
+  return (store.activities || []).some((a) => a.cell === cell && hasMedia(a));
 }
 
 function selectCell(cell, { toastOnSelect = false } = {}) {
@@ -781,6 +794,7 @@ function bindUi() {
     try {
       const url = await uploadMedia(path, blob, blob.type);
       activity.media_url = url;
+      activity.media_path = path;
       try { localStorage.setItem('tourtle.v0.hex-progress', JSON.stringify(engine.getSnapshot().store)); } catch {}
     } catch (e) {
       console.warn('[media] upload failed, queued for retry', e?.message || e);
@@ -973,7 +987,10 @@ function bindUi() {
     try {
       const url = await uploadMedia(path, voiceBlob, voiceBlob.type);
       const idx = engine.getSnapshot().store.activities.findIndex((a) => a.id === activity.id);
-      if (idx !== -1) engine.getSnapshot().store.activities[idx].media_url = url;
+      if (idx !== -1) {
+        engine.getSnapshot().store.activities[idx].media_url = url;
+        engine.getSnapshot().store.activities[idx].media_path = path;
+      }
       try { localStorage.setItem('tourtle.v0.hex-progress', JSON.stringify(engine.getSnapshot().store)); } catch {}
     } catch (e) {
       console.warn('[media] voice upload failed, queued for retry', e?.message || e);

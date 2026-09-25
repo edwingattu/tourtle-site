@@ -59,12 +59,37 @@ export async function flushMediaOutbox(engine) {
       const url = await uploadMedia(job.path, job.blob, job.blob.type);
       const acts = engine.getSnapshot().store.activities;
       const rec = acts.find((a) => a.id === job.id);
-      if (rec) rec.media_url = url;
+      if (rec) { rec.media_url = url; rec.media_path = job.path; }
       try { localStorage.setItem('tourtle.v0.hex-progress', JSON.stringify(engine.getSnapshot().store)); } catch {}
       done.push(job);
     } catch (e) { console.warn('[media] retry failed', e?.message || e); }
   }
   for (const d of done) mediaOutbox.splice(mediaOutbox.indexOf(d), 1);
+}
+
+// Signed URLs: minted per view (1h), cached in memory until near-expiry.
+// Storage paths (not URLs) are what sync carries — URLs never persist.
+const signCache = new Map();
+export async function signedUrl(path, expiresIn = 3600) {
+  const hit = signCache.get(path);
+  if (hit && hit.exp > Date.now() + 5 * 60 * 1000) return hit.url;
+  const { data, error } = await supabase.storage.from('tourtle-media').createSignedUrl(path, expiresIn);
+  if (error) throw error;
+  signCache.set(path, { url: data.signedUrl, exp: Date.now() + expiresIn * 1000 });
+  return data.signedUrl;
+}
+
+// Back-compat: pre-privacy rows carry only a public media_url — derive the path.
+export function pathFromActivity(a) {
+  if (!a) return null;
+  if (a.media_path) return a.media_path;
+  const u = a.media_url || '';
+  const m = u.match(/\/tourtle-media\/([^?]+)/);
+  return m ? m[1] : null;
+}
+
+export function hasMedia(a) {
+  return !!(a && (a.localUrl || a.media_path || a.media_url));
 }
 
 export async function uploadMedia(path, blob, contentType) {

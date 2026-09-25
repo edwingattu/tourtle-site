@@ -106,6 +106,7 @@ export async function flush(engine) {
         tiles: a.tiles || [],
         media_url: a.media_url || null,
         media_type: a.captureType || null,
+        media_path: a.media_path || null,
         created_at: new Date(a.createdAt).toISOString(),
       }));
       const { error } = await supabase.from('activities').upsert(rows, { onConflict: 'id' });
@@ -116,13 +117,14 @@ export async function flush(engine) {
 
     // Media backfill: activities already flushed before their upload finished
     // get their media_url patched (partial upsert by id).
-    const withMedia = snap.store.activities.filter((a) => !a.sandbox && a.media_url);
+    const withMedia = snap.store.activities.filter((a) => !a.sandbox && (a.media_url || a.media_path));
     if (withMedia.length) {
       const rows = withMedia.map((a) => ({
         id: a.id,
         user_id: uid,
         media_url: a.media_url,
         media_type: a.captureType || null,
+        media_path: a.media_path || null,
       }));
       const { error } = await supabase.from('activities').upsert(rows, { onConflict: 'id' });
       if (error) console.warn('[sync] media backfill failed:', error.message);
