@@ -24,6 +24,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     style: CONFIG.mapStyle,
     center: CONFIG.defaultCenter,
     zoom: CONFIG.defaultZoom,
+    pitch: 45,
+    maxPitch: 45,
+    minPitch: 45,
     attributionControl: true,
   });
 
