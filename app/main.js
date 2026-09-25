@@ -156,15 +156,28 @@ function updateCountdown(rec) {
 
 // Per-tile media gallery: module scope so renderHud/selectCell can refresh it
 // on every tile change (bindUi-local defs are invisible here).
-function openViewer(url, isVideo) {
-  const dlg = $('#mediaViewer');
-  if (!dlg) return;
+let viewerItems = [];
+let viewerIndex = 0;
+function showViewerIndex(i) {
+  if (!viewerItems.length) return;
+  viewerIndex = (i + viewerItems.length) % viewerItems.length;
+  const { url, isVideo } = viewerItems[viewerIndex];
   const img = $('#viewerImg'), vid = $('#viewerVideo');
   img.hidden = true; vid.hidden = true;
   try { vid.pause?.(); } catch {}
   if (isVideo) { vid.src = url; vid.hidden = false; }
   else { img.src = url; img.hidden = false; }
-  try { dlg.showModal(); } catch {}
+  const multi = viewerItems.length > 1;
+  const prev = $('#viewerPrev'), next = $('#viewerNext');
+  if (prev) prev.hidden = !multi;
+  if (next) next.hidden = !multi;
+}
+function openViewer(url, isVideo) {
+  const dlg = $('#mediaViewer');
+  if (!dlg) return;
+  const idx = viewerItems.findIndex((it) => it.url === url);
+  if (!dlg.open) { try { dlg.showModal(); } catch {} }
+  showViewerIndex(idx >= 0 ? idx : 0);
 }
 
 function renderTileGallery() {
@@ -173,6 +186,13 @@ function renderTileGallery() {
   const acts = engine.getSnapshot().store.activities.filter((a) => a.cell === selectedCell && (a.media_url || a.localUrl));
   gal.innerHTML = '';
   gal.hidden = acts.length === 0;
+  viewerItems = acts
+    .map((a) => {
+      const url = a.media_url || a.localUrl;
+      if (!url) return null;
+      return { url, isVideo: (a.captureType === 'video') || /\.(mp4|webm|mov)$/i.test(url.split('?')[0]) };
+    })
+    .filter(Boolean);
   for (const a of acts) {
     const url = a.media_url || a.localUrl;
     if (!url) continue;
@@ -476,6 +496,21 @@ function bindUi() {
   let voiceStream = null, voiceRecorder = null, voiceChunks = [], voiceBlob = null, voiceTimer = null, voiceSec = 0;
 
   $('#viewerClose')?.addEventListener('click', () => { try { $('#mediaViewer').close(); } catch {} const v = $('#viewerVideo'); v.pause?.(); v.removeAttribute('src'); v.load?.(); });
+  $('#viewerPrev')?.addEventListener('click', (e) => { e.stopPropagation(); showViewerIndex(viewerIndex - 1); });
+  $('#viewerNext')?.addEventListener('click', (e) => { e.stopPropagation(); showViewerIndex(viewerIndex + 1); });
+  {
+    // Swipe between gallery items in the viewer
+    let touchX = null;
+    const dlg = $('#mediaViewer');
+    dlg?.addEventListener('touchstart', (e) => { touchX = e.touches[0]?.clientX ?? null; }, { passive: true });
+    dlg?.addEventListener('touchend', (e) => {
+      if (touchX == null) return;
+      const dx = (e.changedTouches[0]?.clientX ?? touchX) - touchX;
+      touchX = null;
+      if (Math.abs(dx) < 40) return;
+      showViewerIndex(viewerIndex + (dx < 0 ? 1 : -1));
+    }, { passive: true });
+  }
 
   function stopCamStream() { try { camRecorder?.state === 'recording' && camRecorder.stop(); } catch {} try { camStream?.getTracks().forEach((t) => t.stop()); } catch {} camStream = null; const v = $('#camPreview'); if (v) v.srcObject = null; }
   async function openCamera(mode = 'photo') {
@@ -569,6 +604,7 @@ function bindUi() {
     if (voiceArea) voiceArea.hidden = false;
   }
   function closeVoiceArea() {
+    try { stopWave(); } catch {}
     try { voiceRecorder?.state !== 'inactive' && voiceRecorder.stop(); } catch {}
     try { voiceStream?.getTracks().forEach((t) => t.stop()); } catch {}
     voiceStream = null; voiceBlob = null;
@@ -605,7 +641,48 @@ function bindUi() {
 
   $('#voiceClose')?.addEventListener('click', closeVoiceArea);
 
-  // Voice recorder
+  // Voice recorder (+ live waveform via AnalyserNode)
+  let waveCtx = null, waveAnalyser = null, waveRaf = 0, waveBars = [];
+  function buildWaveBars() {
+    const wave = $('#voiceWave');
+    if (!wave) return;
+    wave.innerHTML = '';
+    waveBars = [];
+    for (let i = 0; i < 28; i++) {
+      const s = document.createElement('span');
+      wave.appendChild(s);
+      waveBars.push(s);
+    }
+  }
+  function stopWave() {
+    cancelAnimationFrame(waveRaf);
+    waveRaf = 0;
+    try { waveCtx?.close(); } catch {}
+    waveCtx = null; waveAnalyser = null;
+  }
+  function startWave(stream) {
+    try {
+      stopWave();
+      buildWaveBars();
+      waveCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = waveCtx.createMediaStreamSource(stream);
+      waveAnalyser = waveCtx.createAnalyser();
+      waveAnalyser.fftSize = 256;
+      src.connect(waveAnalyser);
+      const data = new Uint8Array(waveAnalyser.frequencyBinCount);
+      const tick = () => {
+        if (!waveAnalyser) return;
+        waveAnalyser.getByteFrequencyData(data);
+        const n = waveBars.length;
+        for (let i = 0; i < n; i++) {
+          const v = data[Math.floor((i / n) * data.length * 0.7)] / 255;
+          waveBars[i].style.height = `${Math.max(3, Math.round(v * 26))}px`;
+        }
+        waveRaf = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (e) { console.warn('[voice] wave failed', e?.message || e); }
+  }
   $('#voiceRec')?.addEventListener('click', async () => {
     try {
       voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -617,15 +694,17 @@ function bindUi() {
         voiceBlob = new Blob(voiceChunks, { type: voiceRecorder.mimeType || 'audio/webm' });
         const a = $('#voiceAudio'); a.src = URL.createObjectURL(voiceBlob); a.hidden = false;
         $('#voiceSave').hidden = false; $('#voicePlay').hidden = false;
-        clearInterval(voiceTimer); 
+        clearInterval(voiceTimer);
+        stopWave();
       };
       voiceRecorder.start();
+      startWave(voiceStream);
       $('#voiceRec').hidden = true; $('#voiceStop').hidden = false;
       voiceSec = 0; const timer = $('#voiceTimer');
       voiceTimer = setInterval(() => { voiceSec++; if (timer) timer.textContent = `${Math.floor(voiceSec/60)}:${String(voiceSec%60).padStart(2,'0')}`; if (voiceSec >= 120) voiceRecorder.stop(); }, 1000);
     } catch (e) { console.warn('[voice] mic denied', e?.message || e); }
   });
-  $('#voiceStop')?.addEventListener('click', () => { try { voiceRecorder.stop(); } catch {} $('#voiceStop').hidden = true; $('#voiceRec').hidden = false; voiceStream?.getTracks().forEach((t) => t.stop()); clearInterval(voiceTimer); });
+  $('#voiceStop')?.addEventListener('click', () => { try { voiceRecorder.stop(); } catch {} $('#voiceStop').hidden = true; $('#voiceRec').hidden = false; voiceStream?.getTracks().forEach((t) => t.stop()); clearInterval(voiceTimer); stopWave(); });
   $('#voicePlay')?.addEventListener('click', () => { const a = $('#voiceAudio'); if (a) a.play(); });
   $('#voiceSave')?.addEventListener('click', async () => {
     if (!voiceBlob) return;

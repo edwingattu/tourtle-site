@@ -1361,6 +1361,41 @@ button {
 
 .viewer-close { z-index: 2; }
 
+.viewer-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  border: 0;
+  background: rgba(255,255,255,0.16);
+  color: #fff;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  font-size: 26px;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.viewer-nav.prev { left: 12px; }
+.viewer-nav.next { right: 12px; }
+.viewer-nav[hidden] { display: none !important; }
+
+.voice-wave {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+}
+
+.voice-wave span {
+  width: 3px;
+  min-height: 3px;
+  height: 4px;
+  border-radius: 2px;
+  background: #2a69aa;
+  flex: none;
+}
+
 #viewerImg, #viewerVideo {
   position: absolute;
   inset: 0;
