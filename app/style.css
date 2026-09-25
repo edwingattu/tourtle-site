@@ -673,6 +673,11 @@ button {
   padding: 29px 0;
 }
 
+#unlockingSection {
+  border-top: none;
+  padding-top: 8px;
+}
+
 .section-heading {
   display: flex;
   align-items: end;
