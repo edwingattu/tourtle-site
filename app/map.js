@@ -295,11 +295,16 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       statuses = new Array(cells.length).fill('unclaimed');
     } else if (res === CONFIG.h3Resolution) {
       const neighborSet = unlockedNeighborSet(store);
+      // Mastered = unlocked + stored media (photo/video/voice with a url)
+      const mediaCells = new Set();
+      for (const a of store.activities || []) {
+        if (a.cell && (a.media_url || a.localUrl)) mediaCells.add(a.cell);
+      }
       statuses = new Array(cells.length);
       for (let i = 0; i < cells.length; i++) {
         const cell = cells[i];
         const rec = store.tiles[cell];
-        if (isUnlocked(rec)) statuses[i] = 'unlocked';
+        if (isUnlocked(rec)) statuses[i] = mediaCells.has(cell) ? 'mastered' : 'unlocked';
         else if (rec || neighborSet.has(cell)) statuses[i] = 'activated';
         else statuses[i] = 'unclaimed';
       }
@@ -588,7 +593,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     // Hex base MUST be added before every polygon layer: insertion order
     // is paint order, so this keeps hexes under all fills and labels.
     // Seamless fill, antialias off, no seams. Locked blue-tinted dark grey,
-    // activated the same grey 20% toward white, tinted 50% toward sky blue.
+    // activated the same grey 20% toward white, tinted 50% toward sky blue,
+    // mastered (unlocked + stored media) green. Unlocked is clear.
     map.addLayer({
       id: 'hex-fills',
       type: 'fill',
@@ -600,6 +606,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
           ['get', 'status'],
           'unlocked',
           'rgba(0,0,0,0)',
+          'mastered',
+          '#5cc581',
           'activated',
           '#78a0b8',
           '#3a4b5e',

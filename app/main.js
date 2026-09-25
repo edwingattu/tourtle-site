@@ -445,24 +445,32 @@ function renderHud() {
   updateAreaName(selectedCell);
   updateCountdown(rec);
   try { renderTileGallery(); } catch {}
-  updateCaptureAvailability();
+  updateCaptureAvailability(snap);
   mapView.paint(snap.store);
 }
 
-// Photo + Outing require physical presence: enabled only when the selected
-// tile is the user's live tile. Voice + gallery stay available everywhere.
-function updateCaptureAvailability() {
+// Capture matrix: present on the tile → everything unmuted (active or unlocked).
+// Remote unlocked tile → Voice + gallery only. Remote active/unclaimed → all muted.
+function updateCaptureAvailability(snap) {
   let present = false;
+  let status = 'unclaimed';
   try {
     if (mapView && selectedCell) {
       const { lat, lng } = mapView.getUserLocation();
       present = cellAt(lat, lng) === selectedCell;
+      status = mapView.inspectCell(snap.store, selectedCell).status;
     }
   } catch {}
+  const voiceOpen = present || status === 'unlocked' || status === 'mastered';
   document.querySelectorAll('[data-capture="photo"], [data-capture="session"]').forEach((b) => {
     b.disabled = !present;
     b.classList.toggle('muted', !present);
     b.title = present ? '' : 'Go to this tile to capture';
+  });
+  document.querySelectorAll('[data-capture="voice"]').forEach((b) => {
+    b.disabled = !voiceOpen;
+    b.classList.toggle('muted', !voiceOpen);
+    b.title = voiceOpen ? '' : 'Unlock this tile to leave a voice note';
   });
 }
 
