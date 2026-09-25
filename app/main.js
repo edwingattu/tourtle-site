@@ -158,21 +158,32 @@ function updateCountdown(rec) {
 // on every tile change (bindUi-local defs are invisible here).
 let viewerItems = [];
 let viewerIndex = 0;
+const VOICE_SVG = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg>';
+function mediaKind(a, url) {
+  if (a.captureType === 'video') return 'video';
+  if (a.captureType === 'voice') return 'audio';
+  const ext = (url.split('?')[0].split('.').pop() || '').toLowerCase();
+  if (['mp4', 'webm', 'mov'].includes(ext)) return 'video';
+  if (['m4a', 'mp3', 'wav', 'ogg', 'aac', 'opus'].includes(ext)) return 'audio';
+  return 'image';
+}
 function showViewerIndex(i) {
   if (!viewerItems.length) return;
   viewerIndex = (i + viewerItems.length) % viewerItems.length;
-  const { url, isVideo } = viewerItems[viewerIndex];
-  const img = $('#viewerImg'), vid = $('#viewerVideo');
-  img.hidden = true; vid.hidden = true;
+  const { url, kind } = viewerItems[viewerIndex];
+  const img = $('#viewerImg'), vid = $('#viewerVideo'), aud = $('#viewerAudio');
+  img.hidden = true; vid.hidden = true; aud.hidden = true;
   try { vid.pause?.(); } catch {}
-  if (isVideo) { vid.src = url; vid.hidden = false; }
+  try { aud.pause?.(); } catch {}
+  if (kind === 'video') { vid.src = url; vid.hidden = false; }
+  else if (kind === 'audio') { aud.src = url; aud.hidden = false; }
   else { img.src = url; img.hidden = false; }
   const multi = viewerItems.length > 1;
   const prev = $('#viewerPrev'), next = $('#viewerNext');
   if (prev) prev.hidden = !multi;
   if (next) next.hidden = !multi;
 }
-function openViewer(url, isVideo) {
+function openViewer(url) {
   const dlg = $('#mediaViewer');
   if (!dlg) return;
   const idx = viewerItems.findIndex((it) => it.url === url);
@@ -190,22 +201,29 @@ function renderTileGallery() {
     .map((a) => {
       const url = a.media_url || a.localUrl;
       if (!url) return null;
-      return { url, isVideo: (a.captureType === 'video') || /\.(mp4|webm|mov)$/i.test(url.split('?')[0]) };
+      return { url, kind: mediaKind(a, url) };
     })
     .filter(Boolean);
   for (const a of acts) {
     const url = a.media_url || a.localUrl;
     if (!url) continue;
-    const isVideo = (a.captureType === 'video') || /\.(mp4|webm|mov)$/i.test(url.split('?')[0]);
+    const kind = mediaKind(a, url);
     let el;
-    if (isVideo) { el = document.createElement('video'); el.src = url; el.preload = 'metadata'; el.muted = true; el.playsInline = true; }
+    if (kind === 'video') { el = document.createElement('video'); el.src = url; el.preload = 'metadata'; el.muted = true; el.playsInline = true; }
+    else if (kind === 'audio') {
+      el = document.createElement('button');
+      el.type = 'button';
+      el.setAttribute('aria-label', 'Play voice note');
+      el.innerHTML = VOICE_SVG;
+      el.className = 'g-thumb voice-thumb';
+    }
     else {
       el = document.createElement('img'); el.alt = a.title || 'memory';
       el.addEventListener('error', () => { el.style.opacity = '0.25'; });
       el.src = url;
     }
-    el.className = 'g-thumb';
-    el.addEventListener('click', () => openViewer(url, isVideo));
+    if (kind !== 'audio') el.className = 'g-thumb';
+    el.addEventListener('click', () => openViewer(url));
     gal.appendChild(el);
   }
 }
@@ -495,7 +513,7 @@ function bindUi() {
   let camStream = null, camMode = 'photo', camFacing = 'environment', camRecorder = null, camChunks = [], camPhotoBlob = null, camVideoBlob = null;
   let voiceStream = null, voiceRecorder = null, voiceChunks = [], voiceBlob = null, voiceTimer = null, voiceSec = 0;
 
-  $('#viewerClose')?.addEventListener('click', () => { try { $('#mediaViewer').close(); } catch {} const v = $('#viewerVideo'); v.pause?.(); v.removeAttribute('src'); v.load?.(); });
+  $('#viewerClose')?.addEventListener('click', () => { try { $('#mediaViewer').close(); } catch {} const v = $('#viewerVideo'); v.pause?.(); v.removeAttribute('src'); v.load?.(); const au = $('#viewerAudio'); au.pause?.(); au.removeAttribute('src'); });
   $('#viewerPrev')?.addEventListener('click', (e) => { e.stopPropagation(); showViewerIndex(viewerIndex - 1); });
   $('#viewerNext')?.addEventListener('click', (e) => { e.stopPropagation(); showViewerIndex(viewerIndex + 1); });
   {
@@ -648,7 +666,10 @@ function bindUi() {
     if (!wave) return;
     wave.innerHTML = '';
     waveBars = [];
-    for (let i = 0; i < 28; i++) {
+    // Dynamic count: fill the recording window (3px bar + 2px gap each)
+    const w = wave.clientWidth || wave.parentElement?.clientWidth || 200;
+    const n = Math.max(12, Math.floor(w / 5));
+    for (let i = 0; i < n; i++) {
       const s = document.createElement('span');
       wave.appendChild(s);
       waveBars.push(s);

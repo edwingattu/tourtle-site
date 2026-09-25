@@ -1345,6 +1345,18 @@ button {
   overflow: hidden;
 }
 
+.tile-gallery .g-thumb.voice-thumb {
+  display: grid;
+  place-items: center;
+  background: #e2effb;
+  color: #2a69aa;
+  cursor: pointer;
+}
+
+.tile-gallery .g-thumb.voice-thumb svg {
+  display: block;
+}
+
 /* Media viewer */
 .viewer {
   border: 0;
@@ -1406,6 +1418,16 @@ button {
 }
 
 #viewerImg[hidden], #viewerVideo[hidden] { display: none !important; }
+
+#viewerAudio {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(320px, 86vw);
+}
+
+#viewerAudio[hidden] { display: none !important; }
 
 /* Location gate */
 .gate-dialog {
