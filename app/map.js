@@ -625,16 +625,27 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       },
     });
     // Mastered border: true line layer over the clear fill — no double-draw.
+    // Thick fluorescent green, pulsing via opacity loop below.
     map.addLayer({
       id: 'hex-mastered-borders',
       type: 'line',
       source: 'hex-fog',
       filter: ['==', ['get', 'status'], 'mastered'],
       paint: {
-        'line-color': '#5cc581',
-        'line-width': 2,
+        'line-color': '#00e676',
+        'line-width': 4,
+        'line-opacity': 1,
+        'line-opacity-transition': { duration: 600, delay: 0 },
       },
     });
+    let masterPulseOn = false;
+    setInterval(() => {
+      if (!map.getLayer('hex-mastered-borders')) return;
+      masterPulseOn = !masterPulseOn;
+      try {
+        map.setPaintProperty('hex-mastered-borders', 'line-opacity', masterPulseOn ? 1 : 0.35);
+      } catch {}
+    }, 700);
     // Area labels overlay the street hexes for orientation (their window
     // runs open-top); polygon fills hard-switch per FILL_WINDOW.
     for (const [band, vis] of Object.entries(BAND_VIS)) {
