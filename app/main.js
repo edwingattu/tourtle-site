@@ -100,6 +100,16 @@ function toast(message) {
   clearTimeout(window.toastTimer);
   window.toastTimer = setTimeout(() => el.classList.remove('visible'), 2800);
 }
+// Diagnostic toast: ALWAYS visible (normal toasts are muted) and sticky
+// until tapped — PWA has no console, so this is the readable surface.
+function toastDiag(message) {
+  console.log('[diag]', message);
+  const el = $('#toast');
+  if (!el) return;
+  el.textContent = message;
+  el.classList.add('visible');
+  clearTimeout(window.toastTimer);
+}
 
 function smoothFix(coords) {
   if (typeof coords.speed === 'number' && coords.speed > CONFIG.implausibleSpeedMps) return null;
@@ -784,6 +794,7 @@ function setTracking(on) {
   if (tl) tl.textContent = tracking ? 'Fog clearing on' : 'Fog clearing off';
   if (tracking) {
     lastDwellAt = performance.now();
+    stopWatch(); // re-share while live must not leak the old watch
     startWatch();
     requestWakeLock();
     toast('Live fog clearing is on. Hexes follow your real coordinates.');
@@ -873,7 +884,11 @@ function bindUi() {
       diag = ` · base ${(snap.store.baseCell || '?').slice(0, 8)} · ${getLocationChoice() || 'no-choice'}` +
         (pull ? ` · cloud ${pull.cloudBase || 'none'}${pull.adoptedBase ? ' (adopted)' : ''}` : '');
     } catch {}
-    toast(`${info.status} · H3 ${info.cell} · ${progressPercent(info.rec)}% dwell${diag}`);
+    toastDiag(`${info.status} · H3 ${info.cell} · ${progressPercent(info.rec)}% dwell${diag} · tap toast to dismiss`);
+  });
+  // Tap-to-dismiss for the sticky diagnostic toast.
+  $('#toast')?.addEventListener('click', () => {
+    $('#toast')?.classList.remove('visible');
   });
   $('#leaderboardButton')?.addEventListener('click', () => {
     toast('Pilot leaderboard stays private to invited testers.');
@@ -1626,6 +1641,15 @@ bindUi();
 // If gated, re-run select after picker/share picks a city — postGateSetup handles it.
 // Add a helper on window to re-trigger gate (for manual city switch later)
 window.__tourtleGate = { show: showLocationGate, choice: getLocationChoice };
+// Superadmin escape hatch: the TILT pill re-opens the location gate (re-share
+// GPS or switch city). The pill doesn't exist for non-superadmins, so there
+// is zero prod surface. Fixes a stuck city choice with no other UI to redo it.
+$('#tiltLevel')?.addEventListener('click', async () => {
+  if (!superadminUser) return;
+  gateOpen = true;
+  renderHud(); // neutral card behind the gate
+  try { await showLocationGate(); } catch {}
+});
 setupJoystick({
   mapView,
   engine,
