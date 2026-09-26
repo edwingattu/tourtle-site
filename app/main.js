@@ -381,7 +381,7 @@ function openViewer(url) {
 let galleryToken = 0;
 let gallerySelectMode = false;
 const gallerySelected = new Set();
-let gallerySig = '';
+let gallerySig = null; // null = must rebuild ('' is a valid empty-tile signature)
 let galleryBuiltAt = 0;
 let deleteArmTimer = 0;
 const PLAY_BADGE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M7 4l13 8-13 8z"/></svg>';
@@ -437,7 +437,7 @@ function deleteGalleryItems(ids) {
     return;
   }
   exitGallerySelect();
-  gallerySig = ''; // force rebuild; renderHud recounts + repaints
+  gallerySig = null; // force rebuild; renderHud recounts + repaints
   toast(ids.length === 1 ? 'Memory deleted.' : `${ids.length} memories deleted.`);
   // Pins follow mastered state: un-mastered tiles lose their dots.
   const snap = engine.getSnapshot();
@@ -595,7 +595,7 @@ function isMasteredCell(store, cell) {
 function selectCell(cell, { toastOnSelect = false, src = '?' } = {}) {
   // A new tile always leaves gallery select mode (stale checkboxes die here).
   exitGallerySelect();
-  gallerySig = '';
+  gallerySig = null;
   selectedCell = cell;
   noteSel(src, cell);
   mapView.setSelected(cell);
@@ -929,12 +929,12 @@ function bindUi() {
     gallerySelectMode = !gallerySelectMode;
     if (!gallerySelectMode) gallerySelected.clear();
     disarmDeleteConfirm();
-    gallerySig = ''; // force rebuild: checkboxes in, × buttons out (and back)
+    gallerySig = null; // force rebuild: checkboxes in, × buttons out (and back)
     renderTileGallery();
   });
   $('#galleryDeleteCancel')?.addEventListener('click', () => {
     exitGallerySelect();
-    gallerySig = '';
+    gallerySig = null;
     renderTileGallery();
   });
   $('#galleryDeleteConfirm')?.addEventListener('click', () => {
