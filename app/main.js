@@ -128,6 +128,12 @@ function updateAreaName(cell = selectedCell) {
   const el = $('#areaName');
   const hexEl = $('#hexLine');
   if (!el) return;
+  // Gated (no location yet): never name the default Ramgopalpet tile.
+  if (gateOpen) {
+    el.textContent = 'Choose your city to begin';
+    if (hexEl) hexEl.textContent = 'Waiting for location';
+    return;
+  }
   let lat, lng, id;
   if (cell) {
     const c = cellCenter(cell);
@@ -150,6 +156,15 @@ function updateCountdown(rec) {
   const track = $('#tileProgressTrack');
   const bar = $('#tileProgressBar');
   if (!textEl || !iconEl || !bar) return;
+  // Gated (no location yet): neutral row, no default-tile countdown.
+  if (gateOpen) {
+    textEl.textContent = 'Share your location to begin';
+    iconEl.innerHTML = LOCK_SVG;
+    bar.style.width = '0%';
+    if (track) track.classList.remove('unlocked');
+    if (row) row.classList.remove('unlocked');
+    return;
+  }
   const unlocked = isUnlocked(rec);
   const pct = progressPercent(rec);
   bar.style.width = `${pct}%`;
@@ -656,7 +671,7 @@ function updateCaptureAvailability(snap) {
   let present = false;
   let status = 'unclaimed';
   try {
-    if (mapView && selectedCell) {
+    if (mapView && selectedCell && !gateOpen) {
       const { lat, lng } = mapView.getUserLocation();
       present = cellAt(lat, lng) === selectedCell;
       status = mapView.inspectCell(snap.store, selectedCell).status;
@@ -1319,27 +1334,38 @@ function tick() {
 }
 
 // Location gate: no implicit Hyderabad. Force prompt unless explicit ?region=
-// or a prior explicit choice exists. Persists as tourtle.v0.locationChoice.
-const LOCATION_CHOICE_KEY = 'tourtle.v0.locationChoice';
+// or a prior explicit choice exists. The choice is PER-USER (suffixed with
+// the auth uid) — a device-level key let one account's Share suppress the
+// gate for the next account, planting it on the Ramgopalpet default.
+// The legacy device-level value is ignored and deleted on boot.
+const LOCATION_CHOICE_PREFIX = 'tourtle.v0.locationChoice';
+function choiceKey() {
+  const uid = currentUser?.id || null;
+  return uid ? `${LOCATION_CHOICE_PREFIX}.${uid}` : LOCATION_CHOICE_PREFIX;
+}
 function getLocationChoice() {
-  try { return localStorage.getItem(LOCATION_CHOICE_KEY); } catch { return null; }
+  try { return localStorage.getItem(choiceKey()); } catch { return null; }
 }
 function setLocationChoice(v) {
-  try { localStorage.setItem(LOCATION_CHOICE_KEY, v); } catch {}
+  try { localStorage.setItem(choiceKey(), v); } catch {}
+}
+try { localStorage.removeItem(LOCATION_CHOICE_PREFIX); } catch {}
+// True while the gate dialog is open: the card stays neutral (no default
+// area name) and presence is forced false so no capture can arm.
+let gateOpen = false;
+function hasRealBase() {
+  const base = engine.getSnapshot().store.baseCell;
+  return base !== cellAt(CONFIG.defaultCenter[1], CONFIG.defaultCenter[0]);
 }
 function needsGate() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('region')) return false;
-  if (getLocationChoice()) return false;
-  // Legacy: users who got the Hyderabad default with no explicit choice
-  const base = engine.getSnapshot().store.baseCell;
-  const dCell = cellAt(CONFIG.defaultCenter[1], CONFIG.defaultCenter[0]);
-  if (base === dCell && !savedRegion()) return true;
-  // No choice at all → gate
-  if (!getLocationChoice() && !savedRegion()) return true;
-  // If savedRegion exists but no locationChoice (old user), still gate per spec
-  if (savedRegion() && !getLocationChoice()) return true;
-  return false;
+  const choice = getLocationChoice();
+  if (choice?.startsWith('city:')) return false;
+  // 'granted' only counts with a real non-default base — a stale granted
+  // with the default base means "never actually located", so gate.
+  if (choice === 'granted' && hasRealBase()) return false;
+  return true;
 }
 function guessCountry() {
   try {
@@ -1378,6 +1404,7 @@ function showGateState(which) {
   $('#gateLoading').hidden = which !== 'loading';
 }
 function hideGate() {
+  gateOpen = false;
   const dlg = $('#locationGate');
   try { dlg.close(); } catch {}
   dlg.hidden = true;
@@ -1450,6 +1477,7 @@ let gatePending = null;
   } else {
     // Gate will decide; keep hyd as placeholder for map init (not shown as user loc)
     setRegion('hyd', { persist: false });
+    gateOpen = true;
     gatePending = showLocationGate();
   }
   console.log(`[region] active=${activeRegion} gatePending=${!!gatePending} saved=${savedRegion()} choice=${getLocationChoice()}`);
@@ -1519,8 +1547,8 @@ if (gatePending) {
   } else {
     // No gate: restore last granted base or saved region center
     const base = cellCenter(engine.getSnapshot().store.baseCell);
-    const hasRealBase = getLocationChoice() === 'granted' || getLocationChoice()?.startsWith('city:');
-    if (hasRealBase) {
+    const restored = getLocationChoice() === 'granted' || getLocationChoice()?.startsWith('city:');
+    if (restored) {
       mapView.setUserLocation(base.lng, base.lat);
       mapView.map.setCenter([base.lng, base.lat]);
     } else {
