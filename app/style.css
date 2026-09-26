@@ -1397,6 +1397,25 @@ button {
   color: #173668;
 }
 
+/* Screen-fixed user puck: sky-blue dot, white border, dims on browse */
+#userPuck {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: #4aa8dd;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.45);
+  z-index: 5;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+#userPuck.dimmed { opacity: 0.3; }
+
 .tile-gallery .g-item { position: relative; }
 
 .tile-gallery .g-item .g-thumb { display: block; }

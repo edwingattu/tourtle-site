@@ -18,7 +18,7 @@ import {
   isUnlocked,
 } from './engine.js';
 
-export function createMap({ onHexSelect, onMove, onLevelSelect }) {
+export function createMap({ onHexSelect, onMove, onLevelSelect, onUserGesture }) {
   const map = new maplibregl.Map({
     container: 'liveMap',
     style: CONFIG.mapStyle,
@@ -30,7 +30,22 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     attributionControl: true,
   });
 
-  const userMarker = new maplibregl.Marker({ element: userPuck(), anchor: 'center' });
+  // Screen-fixed user puck: always dead-center, the map moves behind it.
+  // Follow mode recenters on every fix (full opacity); any user gesture on
+  // the map drops to browse mode (puck dims to 30%, camera stays put).
+  const puck = document.createElement('div');
+  puck.id = 'userPuck';
+  map.getContainer().appendChild(puck);
+  let following = true;
+  function setPuckDimmed(dimmed) {
+    puck.classList.toggle('dimmed', !!dimmed);
+  }
+  function enterBrowse() {
+    if (!following) return;
+    following = false;
+    setPuckDimmed(true);
+    onUserGesture?.();
+  }
   let selectedCell = null;
   let userLngLat = CONFIG.defaultCenter;
 
@@ -833,6 +848,11 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       } catch {}
     }
 
+    // User-driven camera moves (pan/zoom/rotate) enter browse mode.
+    // Programmatic moves carry no originalEvent, so follow never trips.
+    map.on('movestart', (e) => {
+      if (e?.originalEvent) enterBrowse();
+    });
     map.on('click', 'hex-fills', (event) => {
       const feature = event.features?.[0];
       if (!feature) return;
@@ -943,8 +963,36 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     },
     setUserLocation(lng, lat, { fly = false } = {}) {
       userLngLat = [lng, lat];
-      userMarker.setLngLat(userLngLat).addTo(map);
-      if (fly) map.easeTo({ center: userLngLat, zoom: Math.max(map.getZoom(), 14), duration: 700 });
+      if (fly) {
+        following = true;
+        setPuckDimmed(false);
+        map.easeTo({ center: userLngLat, zoom: Math.max(map.getZoom(), 14), duration: 700 });
+      } else if (following) {
+        map.jumpTo({ center: userLngLat });
+      }
+      // Browse mode: logical position updates, camera stays (no fight).
+    },
+    isFollowing() {
+      return following;
+    },
+    setFollowing(on) {
+      following = !!on;
+      if (following) setPuckDimmed(false);
+    },
+    setPuckDimmed(dimmed) {
+      setPuckDimmed(dimmed);
+    },
+    // Snap the camera to a target (live location or pinned tile center):
+    // eases over 750ms, resumes follow at full opacity.
+    snapTo(target, { zoom } = {}) {
+      const to = Array.isArray(target) ? target : [target.lng, target.lat];
+      following = true;
+      setPuckDimmed(false);
+      map.easeTo({
+        center: to,
+        ...(zoom ? { zoom: Math.max(map.getZoom(), zoom) } : {}),
+        duration: 750,
+      });
     },
     getUserLocation() {
       return { lng: userLngLat[0], lat: userLngLat[1] };
@@ -953,7 +1001,10 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       return cellAt(userLngLat[1], userLngLat[0]);
     },
     recenter(target = userLngLat) {
-      map.easeTo({ center: target, zoom: Math.max(map.getZoom(), CONFIG.defaultZoom), duration: 750 });
+      const to = Array.isArray(target) ? target : [target.lng, target.lat];
+      following = true;
+      setPuckDimmed(false);
+      map.easeTo({ center: to, zoom: Math.max(map.getZoom(), CONFIG.defaultZoom), duration: 750 });
     },
     currentCellCenter(cell) {
       return cellCenter(cell);
@@ -982,11 +1033,4 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       return { cell, status, rec: store.tiles[cell], unlocked: status === 'unlocked', center: cellCenter(cell) };
     },
   };
-}
-
-function userPuck() {
-  const el = document.createElement('div');
-  el.className = 'user-puck';
-  el.innerHTML = '<i></i>';
-  return el;
 }

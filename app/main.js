@@ -48,7 +48,11 @@ const mapView = createMap({
   onHexSelect: (cell) => {
     selectionPinned = cell !== lastLiveCell;
     selectCell(cell, { toastOnSelect: true, src: 'tap' });
+    resetIdleTimer(); // taps count as activity for the snap-back clock
   },
+  // Map gesture (pan/zoom/rotate) already dropped to browse mode inside the
+  // map — here just restart the idle snap-back clock.
+  onUserGesture: () => resetIdleTimer(),
   onMove: () => mapView.paint(engine.getSnapshot().store),
   onLevelSelect: (band, props) => {
     const detail = props.status === 'unclaimed' ? '' : ` · ${props.frac}% explored`;
@@ -741,7 +745,9 @@ function applyPosition(lat, lng, { fly = false, dwellMs = 0 } = {}) {
     liveCandidate = null;
     liveCandidateHits = 0;
   }
-  if (!selectionPinned && cell !== selectedCell) selectCell(cell, { src: 'gps' });
+  // Browse mode (map panned away): GPS never reselects the card — it holds
+  // its tile until snap-back or a new tap. Follow mode tracks live as before.
+  if (!selectionPinned && mapView.isFollowing() && cell !== selectedCell) selectCell(cell, { src: 'gps' });
   else renderHud();
 }
 
@@ -868,6 +874,7 @@ function bindUi() {
     // Explicit "take me home": unpin and show the live tile's card.
     selectionPinned = false;
     try { selectCell(mapView.cellUnderUser(), { src: 'recenter' }); } catch {}
+    resetIdleTimer();
     toast('Centered on your current tile.');
   });
   // Area-name tap logs debug info AND expands (no stopPropagation — swallowing
@@ -1366,6 +1373,23 @@ function bindUi() {
   });
 }
 
+// Idle snap-back: 2 min with no map/tap activity while browsed eases the
+// camera home — pinned remote card snaps to its tile center, else live.
+const IDLE_SNAP_MS = 2 * 60 * 1000;
+let idleTimer = 0;
+function resetIdleTimer() {
+  clearTimeout(idleTimer);
+  idleTimer = window.setTimeout(autoSnapBack, IDLE_SNAP_MS);
+}
+function autoSnapBack() {
+  if (!mapView || mapView.isFollowing()) { resetIdleTimer(); return; }
+  const target = (selectionPinned && selectedCell)
+    ? cellCenter(selectedCell)
+    : mapView.getUserLocation();
+  mapView.snapTo(target);
+  resetIdleTimer();
+}
+
 function tick() {
   engine.expireOutingIfNeeded();
   if (tracking && !locationFilter.frozen) {
@@ -1561,6 +1585,7 @@ async function postGateSetup(region, opts = {}) {
   // Push the fresh grant/city base to the cloud NOW (don't wait 30s — a
   // quick close used to leave a stale cloud row behind).
   flush(engine).catch(() => {});
+  resetIdleTimer();
 }
 /** Swap the active region's packs and repaint. Districts lazy-load on zoom. */
 let regionSwitching = false;
@@ -1581,6 +1606,7 @@ async function switchRegion(next) {
     selectCell(mapView.cellUnderUser(), { src: 'region' });
     const credit = $('#dataCredit');
     if (credit) credit.textContent = areasDbg.regionCredit();
+    resetIdleTimer();
     console.log(`[region] switched to ${next}`);
   } finally {
     regionSwitching = false;
@@ -1665,6 +1691,7 @@ setupJoystick({
 }
 renderHud();
 mapView.paint(engine.getSnapshot().store);
+resetIdleTimer();
 setInterval(tick, 1000);
 // Push the delta outbox on a cadence + whenever the app hides. Pulls stay
 // launch-only per V0 scope. Failed media uploads retry on the same cadence.
