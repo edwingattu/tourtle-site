@@ -16,6 +16,9 @@ const SHELL = [
   '/app/auth.js',
   '/app/icons/icon-192.png',
   '/app/icons/icon-512.png',
+  '/app/icons/favicon-32.png',
+  '/app/brand/turtle-dark-256.png',
+  '/app/brand/tourtle-lockup-800.png',
   '/app/data/meta.json',
   '/app/data/areas.json',
 ];

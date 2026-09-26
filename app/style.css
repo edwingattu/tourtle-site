@@ -78,14 +78,21 @@ button {
 }
 
 .brand-mark {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50% 50% 45% 50%;
-  background: var(--navy);
-  color: var(--mint);
-  font: 600 15px Manrope, sans-serif;
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.auth-lockup {
+  display: block;
+  margin-bottom: 18px;
+}
+
+.auth-lockup img {
+  display: block;
+  width: 220px;
+  height: auto;
 }
 
 .icon-button {
