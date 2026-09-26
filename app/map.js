@@ -502,6 +502,9 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
   map.on('load', () => {
     map.addSource('hex-fog', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addSource('activities', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    // Tap feedback: single-feature sources, fed from the clicked hex.
+    map.addSource('tap-flash', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addSource('tap-ring', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     for (const band of ['area', 'district', 'city', 'state', 'country', 'continent']) {
       map.addSource(`${band}-tiles`, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addSource(`${band}-labels`, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -746,6 +749,62 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         'circle-opacity-transition': { duration: 300, delay: 0 },
       },
     });
+    // Tap feedback: the tapped hex flashes white, then its edge echoes
+    // outward and fades — the six-edge trace is what sells "tile". One
+    // rAF timeline on single-feature sources; retaps restart it.
+    map.addLayer({
+      id: 'tap-flash',
+      type: 'fill',
+      source: 'tap-flash',
+      paint: { 'fill-color': '#ffffff', 'fill-opacity': 0 },
+    });
+    map.addLayer({
+      id: 'tap-ring',
+      type: 'line',
+      source: 'tap-ring',
+      paint: {
+        'line-color': '#cfeafb',
+        'line-width': 2,
+        'line-opacity': 0,
+      },
+    });
+    let tapRaf = 0;
+    const TAP_DUR = 650;
+    function playTapTile(geometry) {
+      let flash, ring;
+      try {
+        flash = map.getSource('tap-flash');
+        ring = map.getSource('tap-ring');
+        if (!flash || !ring) return;
+      } catch { return; }
+      const feat = { type: 'Feature', properties: {}, geometry };
+      try {
+        flash.setData({ type: 'FeatureCollection', features: [feat] });
+        ring.setData({ type: 'FeatureCollection', features: [feat] });
+      } catch { return; }
+      cancelAnimationFrame(tapRaf);
+      const t0 = performance.now();
+      const frame = (now) => {
+        const t = Math.min(1, (now - t0) / TAP_DUR);
+        const ease = 1 - (1 - t) * (1 - t); // fast edge light, slow echo out
+        try {
+          map.setPaintProperty('tap-flash', 'fill-opacity', 0.45 * (1 - t));
+          map.setPaintProperty('tap-ring', 'line-width', 2 + 7 * ease);
+          map.setPaintProperty('tap-ring', 'line-opacity', 0.95 * (1 - t));
+        } catch {}
+        if (t < 1) {
+          tapRaf = requestAnimationFrame(frame);
+        } else {
+          try {
+            map.setPaintProperty('tap-flash', 'fill-opacity', 0);
+            map.setPaintProperty('tap-ring', 'line-opacity', 0);
+            flash.setData({ type: 'FeatureCollection', features: [] });
+            ring.setData({ type: 'FeatureCollection', features: [] });
+          } catch {}
+        }
+      };
+      tapRaf = requestAnimationFrame(frame);
+    }
     // Tap-gated pins: show for the tapped mastered tile, then fade over 60s.
     let pinFadeTimer = 0;
     function setPinsOpacity(v, transitionMs) {
@@ -759,6 +818,10 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       const feature = event.features?.[0];
       if (!feature) return;
       selectedCell = feature.properties.h3;
+      // Tile feel: flash + echo ring + a 12ms haptic tick (Android only —
+      // iOS Safari exposes no web haptics; the guard makes it a no-op).
+      playTapTile(feature.geometry);
+      try { navigator.vibrate?.(12); } catch {}
       onHexSelect?.(selectedCell, feature.properties.status);
     });
 
