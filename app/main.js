@@ -47,7 +47,7 @@ const mapView = createMap({
   // Tapping the live tile itself unpins (resume follow).
   onHexSelect: (cell) => {
     selectionPinned = cell !== lastLiveCell;
-    selectCell(cell, { toastOnSelect: true });
+    selectCell(cell, { toastOnSelect: true, src: 'tap' });
   },
   onMove: () => mapView.paint(engine.getSnapshot().store),
   onLevelSelect: (band, props) => {
@@ -71,6 +71,19 @@ let selectedCell = engine.getSnapshot().store.baseCell;
 let selectionPinned = false;
 let lastLiveCell = null;
 let liveCandidate = null;
+// Selection trail (last 10): who set the card's tile and why. Readable via
+// window.__tourtleSel when the card ever looks wrong.
+const selTrail = [];
+function noteSel(source, cell) {
+  selTrail.push({
+    t: new Date().toISOString().slice(11, 19),
+    source,
+    cell: cell ? cell.slice(0, 8) : null,
+    pinned: selectionPinned,
+  });
+  if (selTrail.length > 10) selTrail.shift();
+  try { window.__tourtleSel = selTrail.slice(); } catch {}
+}
 let liveCandidateHits = 0;
 let captureType = 'photo';
 let selectedCategory = 'dining';
@@ -576,11 +589,12 @@ function isMasteredCell(store, cell) {
   return (store.activities || []).some((a) => a.cell === cell && hasMedia(a));
 }
 
-function selectCell(cell, { toastOnSelect = false } = {}) {
+function selectCell(cell, { toastOnSelect = false, src = '?' } = {}) {
   // A new tile always leaves gallery select mode (stale checkboxes die here).
   exitGallerySelect();
   gallerySig = '';
   selectedCell = cell;
+  noteSel(src, cell);
   mapView.setSelected(cell);
   const snap = engine.getSnapshot();
   mapView.paint(snap.store);
@@ -705,13 +719,16 @@ function applyPosition(lat, lng, { fly = false, dwellMs = 0 } = {}) {
       lastLiveCell = cell;
       liveCandidate = null;
       liveCandidateHits = 0;
+      // Sustained physical move drops a pinned card — say so once, so the
+      // card following the user is never mistaken for a bug.
+      if (selectionPinned) toast('Moved to a new tile — showing your live tile.');
       selectionPinned = false;
     }
   } else {
     liveCandidate = null;
     liveCandidateHits = 0;
   }
-  if (!selectionPinned && cell !== selectedCell) selectCell(cell);
+  if (!selectionPinned && cell !== selectedCell) selectCell(cell, { src: 'gps' });
   else renderHud();
 }
 
@@ -836,7 +853,7 @@ function bindUi() {
     mapView.recenter();
     // Explicit "take me home": unpin and show the live tile's card.
     selectionPinned = false;
-    try { selectCell(mapView.cellUnderUser()); } catch {}
+    try { selectCell(mapView.cellUnderUser(), { src: 'recenter' }); } catch {}
     toast('Centered on your current tile.');
   });
   // Area-name tap logs debug info AND expands (no stopPropagation — swallowing
@@ -1495,7 +1512,7 @@ async function postGateSetup(region, opts = {}) {
     engine.setBase(lat, lng);
   }
   mapView.paint(engine.getSnapshot().store);
-  selectCell(mapView.cellUnderUser());
+  selectCell(mapView.cellUnderUser(), { src: 'boot' });
   const credit = $('#dataCredit');
   if (credit) credit.textContent = areasDbg.regionCredit();
 }
@@ -1515,7 +1532,7 @@ async function switchRegion(next) {
     lastLiveCell = null;
     liveCandidate = null;
     liveCandidateHits = 0;
-    selectCell(mapView.cellUnderUser());
+    selectCell(mapView.cellUnderUser(), { src: 'region' });
     const credit = $('#dataCredit');
     if (credit) credit.textContent = areasDbg.regionCredit();
     console.log(`[region] switched to ${next}`);
@@ -1573,7 +1590,7 @@ await bootstrap(engine);
       `area=${area?.id || 'none'} district=${dist?.id || 'none'}`,
   );
 }
-if (!gatePending) selectCell(mapView.cellUnderUser());
+if (!gatePending) selectCell(mapView.cellUnderUser(), { src: 'boot' });
 bindUi();
 // If gated, re-run select after picker/share picks a city — postGateSetup handles it.
 // Add a helper on window to re-trigger gate (for manual city switch later)

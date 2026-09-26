@@ -805,6 +805,21 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       };
       tapRaf = requestAnimationFrame(frame);
     }
+    // Selected tile outline: persistent white edge binding the tapped tile
+    // to its card (the tap flash fades; this stays until another tile is
+    // picked). Sits above every fill so it reads at all bands.
+    // Filter-matched on the hex id — no geometry work per tap.
+    map.addLayer({
+      id: 'selected-outline',
+      type: 'line',
+      source: 'hex-fog',
+      filter: ['==', ['get', 'h3'], ''],
+      paint: {
+        'line-color': '#ffffff',
+        'line-width': 3,
+        'line-opacity': 0.95,
+      },
+    });
     // Tap-gated pins: show for the tapped mastered tile, then fade over 60s.
     let pinFadeTimer = 0;
     function setPinsOpacity(v, transitionMs) {
@@ -916,6 +931,11 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     },
     setSelected(cell) {
       selectedCell = cell;
+      try {
+        if (map.getLayer('selected-outline')) {
+          map.setFilter('selected-outline', ['==', ['get', 'h3'], cell || '']);
+        }
+      } catch {}
     },
     setUserLocation(lng, lat, { fly = false } = {}) {
       userLngLat = [lng, lat];
