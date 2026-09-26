@@ -644,7 +644,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect, onUserGesture })
       filter: ['==', ['get', 'status'], 'mastered'],
       paint: {
         'line-color': '#2ed67c',
-        'line-width': 4,
+        'line-width': 7,
         'line-opacity': 1,
         'line-opacity-transition': { duration: 1800, delay: 0 },
       },
