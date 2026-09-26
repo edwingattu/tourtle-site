@@ -131,12 +131,12 @@ button {
   flex-wrap: wrap;
 }
 
-/* Diagnostic readouts (V0 transient tuning). Top-left stack, freed by
- * the retired legend. Superadmin gets both; admin gets zoom only. */
+/* Diagnostic readouts (V0 transient tuning). Top-right stack, in the slot
+ * freed by the tracking pill. Superadmin gets both; admin gets zoom only. */
 .zoom-level {
   position: absolute;
   z-index: 3;
-  left: 24px;
+  right: 24px;
   top: 88px;
   background: rgba(23, 54, 104, 0.85);
   color: #fff;
@@ -151,7 +151,7 @@ button {
 .tilt-level {
   position: absolute;
   z-index: 3;
-  left: 24px;
+  right: 24px;
   top: 118px;
   background: rgba(23, 54, 104, 0.85);
   color: #fff;
@@ -163,12 +163,8 @@ button {
   letter-spacing: 0.02em;
 }
 
-/* Live Fog Clearing pill, promoted from the card onto the map (zoom-counter slot). */
+/* Explore Live pill: lives in the card float stack, above the card. */
 .map-tracking {
-  position: absolute;
-  z-index: 3;
-  right: 24px;
-  top: 88px;
   box-shadow: 0 4px 16px rgba(21, 73, 60, 0.12);
 }
 
@@ -254,12 +250,33 @@ button {
   border-radius: 999px;
 }
 
-.bottom-card {
+/* Card dock: bottom-anchored column. The float stack (recenter + Explore
+ * Live) rides directly above the card and follows it as it expands. */
+.card-dock {
   position: absolute;
   z-index: 4;
   left: 12px;
   right: 12px;
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  pointer-events: none;
+}
+
+.card-dock > * { pointer-events: auto; }
+
+.card-float-stack {
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.bottom-card {
+  position: relative;
   border: 1px solid rgba(255, 255, 255, 0.6);
   background: rgba(248, 247, 242, 0.94);
   border-radius: 18px;
@@ -312,7 +329,7 @@ button {
 }
 
 @media (min-width: 700px) {
-  .bottom-card {
+  .card-dock {
     left: 25px;
     right: auto;
     width: min(430px, calc(100vw - 50px));

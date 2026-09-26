@@ -797,7 +797,7 @@ function setTracking(on) {
   $('#trackingButton').classList.toggle('live', tracking);
   $('#trackingButton').setAttribute('aria-pressed', String(tracking));
   const tl = $('#trackingLabel');
-  if (tl) tl.textContent = tracking ? 'Fog clearing on' : 'Fog clearing off';
+  if (tl) tl.textContent = tracking ? 'Explore Live on' : 'Explore Live off';
   if (tracking) {
     lastDwellAt = performance.now();
     stopWatch(); // re-share while live must not leak the old watch
@@ -1373,9 +1373,9 @@ function bindUi() {
   });
 }
 
-// Idle snap-back: 2 min with no map/tap activity while browsed eases the
-// camera home — pinned remote card snaps to its tile center, else live.
-const IDLE_SNAP_MS = 2 * 60 * 1000;
+// Idle snap-back: 30s with no map/tap activity while browsed snaps home —
+// live tile only, mirroring the recenter button (unpin + live card).
+const IDLE_SNAP_MS = 30 * 1000;
 let idleTimer = 0;
 function resetIdleTimer() {
   clearTimeout(idleTimer);
@@ -1383,10 +1383,9 @@ function resetIdleTimer() {
 }
 function autoSnapBack() {
   if (!mapView || mapView.isFollowing()) { resetIdleTimer(); return; }
-  const target = (selectionPinned && selectedCell)
-    ? cellCenter(selectedCell)
-    : mapView.getUserLocation();
-  mapView.snapTo(target);
+  mapView.recenter();
+  selectionPinned = false;
+  try { selectCell(mapView.cellUnderUser(), { src: 'autosnap' }); } catch {}
   resetIdleTimer();
 }
 

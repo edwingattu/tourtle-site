@@ -25,14 +25,7 @@
       <div class="zoom-level" id="zoomLevel" aria-hidden="true">–</div>
       <div class="tilt-level" id="tiltLevel" aria-hidden="true">–</div>
 
-      <button class="status-pill map-tracking" id="trackingButton" type="button" aria-pressed="false">
-        <i></i>Live Fog Clearing
-      </button>
-
       <div class="map-controls">
-        <button class="map-control" id="recenterButton" type="button" aria-label="Recenter map">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
-        </button>
         <button class="map-control" id="joystickButton" type="button" aria-label="Toggle sandbox joystick" aria-pressed="false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 12V6"/><circle cx="12" cy="4.5" r="1.8" fill="currentColor" stroke="none"/></svg>
         </button>
@@ -43,7 +36,16 @@
         <p class="joy-tag">sandbox · never syncs</p>
       </div>
 
-      <div class="bottom-card" id="bottomCard">
+      <div class="card-dock" id="cardDock">
+        <div class="card-float-stack">
+          <button class="map-control" id="recenterButton" type="button" aria-label="Recenter map">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+          </button>
+          <button class="status-pill map-tracking" id="trackingButton" type="button" aria-pressed="false">
+            <i></i><span id="trackingLabel">Explore Live</span>
+          </button>
+        </div>
+        <div class="bottom-card" id="bottomCard">
         <div class="card-handle" aria-hidden="true"><span></span></div>
         <div class="map-summary" id="summaryToggle" role="button" tabindex="0" aria-expanded="false" aria-controls="detailContent" aria-label="Expand details">
           <div class="summary-text">
@@ -191,6 +193,7 @@
           </div>
 
           <p class="data-credit" id="dataCredit"></p>
+        </div>
         </div>
       </div>
     </div>
