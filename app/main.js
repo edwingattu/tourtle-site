@@ -865,7 +865,15 @@ function bindUi() {
   tileInfoBtn?.addEventListener('click', () => {
     const snap = engine.getSnapshot();
     const info = mapView.inspectCell(snap.store, selectedCell);
-    toast(`${info.status} · H3 ${info.cell} · ${progressPercent(info.rec)}% dwell`);
+    // Diagnostics tail: home-base prefix + location choice + last pull.
+    // Quote this back if the home tile ever looks wrong.
+    let diag = '';
+    try {
+      const pull = window.__tourtlePull;
+      diag = ` · base ${(snap.store.baseCell || '?').slice(0, 8)} · ${getLocationChoice() || 'no-choice'}` +
+        (pull ? ` · cloud ${pull.cloudBase || 'none'}${pull.adoptedBase ? ' (adopted)' : ''}` : '');
+    } catch {}
+    toast(`${info.status} · H3 ${info.cell} · ${progressPercent(info.rec)}% dwell${diag}`);
   });
   $('#leaderboardButton')?.addEventListener('click', () => {
     toast('Pilot leaderboard stays private to invited testers.');
@@ -1505,6 +1513,19 @@ let gatePending = null;
     gatePending = showLocationGate();
   }
   console.log(`[region] active=${activeRegion} gatePending=${!!gatePending} saved=${savedRegion()} choice=${getLocationChoice()}`);
+  // Boot log (last 5): conclusive reading if the base ever looks wrong.
+  // Quoted back via the area-name tap toast — no console needed.
+  try {
+    const log = JSON.parse(localStorage.getItem('tourtle.v0.bootlog') || '[]');
+    log.push({
+      t: new Date().toISOString().slice(5, 19),
+      uid: (currentUser?.id || '?').slice(0, 8),
+      choice: getLocationChoice(),
+      gate: !!gatePending,
+      base: (engine.getSnapshot().store.baseCell || '?').slice(0, 8),
+    });
+    localStorage.setItem('tourtle.v0.bootlog', JSON.stringify(log.slice(-5)));
+  } catch {}
 }
 async function postGateSetup(region, opts = {}) {
   await areasDbg.loadCore();
@@ -1522,6 +1543,9 @@ async function postGateSetup(region, opts = {}) {
   selectCell(mapView.cellUnderUser(), { src: 'boot' });
   const credit = $('#dataCredit');
   if (credit) credit.textContent = areasDbg.regionCredit();
+  // Push the fresh grant/city base to the cloud NOW (don't wait 30s — a
+  // quick close used to leave a stale cloud row behind).
+  flush(engine).catch(() => {});
 }
 /** Swap the active region's packs and repaint. Districts lazy-load on zoom. */
 let regionSwitching = false;

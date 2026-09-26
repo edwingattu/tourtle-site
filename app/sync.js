@@ -43,7 +43,20 @@ export async function pullAll(engine) {
   }
   engine.applyServerTiles(tiles.data || []);
   engine.mergeActivities(acts.data || []);
-  if (prof.data?.[0]) engine.adoptProfile(prof.data[0]);
+  // Diagnostic footprint: what the cloud profile claimed (base fills local
+  // only when local never located — see adoptProfile). Readable via
+  // window.__tourtlePull / the area-name tap toast.
+  try {
+    const prow = prof.data?.[0] || null;
+    const adopted = prow ? engine.adoptProfile(prow) : false;
+    window.__tourtlePull = {
+      at: new Date().toISOString(),
+      cloudBase: prow?.base_cell ? String(prow.base_cell).slice(0, 8) : null,
+      adoptedBase: !!adopted,
+    };
+  } catch {
+    if (prof.data?.[0]) engine.adoptProfile(prof.data[0]);
+  }
   console.log(
     `[sync] pull ok: ${tiles.data?.length || 0} tiles, ${acts.data?.length || 0} activities, profile ${prof.data?.[0] ? 'found' : 'none'}`,
   );

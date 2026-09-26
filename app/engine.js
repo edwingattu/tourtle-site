@@ -482,13 +482,18 @@ export function createEngine(userId = null) {
       emit();
     },
     // Adopt the cloud profile row (last-write-wins), never regressing streak.
+    // Base is fill-only: a real local base is NEVER overwritten by the cloud
+    // row (stale/second-client rows used to plant the default back). The
+    // cloud base only fills in when this device has never been located.
     adoptProfile(prow) {
-      if (!prow) return;
+      if (!prow) return false;
       if ((prow.streak_days || 0) > store.streakDays) store.streakDays = prow.streak_days;
       if (prow.last_active_date && (store.lastActiveDate || '') < prow.last_active_date) {
         store.lastActiveDate = prow.last_active_date;
       }
-      if (prow.base_cell) store.baseCell = prow.base_cell;
+      const dflt = cellAt(CONFIG.defaultCenter[1], CONFIG.defaultCenter[0]);
+      const adoptedBase = prow.base_cell && store.baseCell === dflt && prow.base_cell !== dflt;
+      if (adoptedBase) store.baseCell = prow.base_cell;
       // A live outing on another device resumes here (mid-outing sync).
       if (prow.current_outing) {
         store.outing = {
@@ -498,6 +503,7 @@ export function createEngine(userId = null) {
         };
       }
       emit();
+      return !!adoptedBase;
     },
     logActivity({ title, category, captureType, lat, lng, cell }) {
       const activity = {
