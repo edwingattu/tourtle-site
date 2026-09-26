@@ -130,6 +130,22 @@ export async function flush(engine) {
       if (error) console.warn('[sync] media backfill failed:', error.message);
     }
 
+    // 2b. Pending deletes: drop server rows + private-storage objects.
+    // Tombstones stay local so pulls never resurrect them. Idempotent:
+    // re-running after a partial success is a harmless no-op.
+    const pendingDeletes = snap.store.pendingDeletes || [];
+    if (pendingDeletes.length) {
+      const ids = pendingDeletes.map((d) => d.id);
+      const paths = pendingDeletes.map((d) => d.path).filter(Boolean);
+      if (paths.length) {
+        const { error } = await supabase.storage.from('tourtle-media').remove(paths);
+        if (error) console.warn('[sync] media delete failed:', error.message);
+      }
+      const { error } = await supabase.from('activities').delete().in('id', ids);
+      if (error) throw error;
+      engine.clearPendingDeletes(); // clears + persists via emit
+    }
+
     // 3. Profile: base, streak, and the live outing (mid-outing sync rides
     // here — every flush carries the current touched list).
     const outing = snap.store.outing;

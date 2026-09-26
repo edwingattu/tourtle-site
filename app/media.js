@@ -60,6 +60,7 @@ export async function flushMediaOutbox(engine) {
       const acts = engine.getSnapshot().store.activities;
       const rec = acts.find((a) => a.id === job.id);
       if (rec) { rec.media_url = url; rec.media_path = job.path; }
+      try { engine.persist(); } catch {}
       try { localStorage.setItem('tourtle.v0.hex-progress', JSON.stringify(engine.getSnapshot().store)); } catch {}
       done.push(job);
     } catch (e) { console.warn('[media] retry failed', e?.message || e); }

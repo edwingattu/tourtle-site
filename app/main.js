@@ -280,16 +280,48 @@ function buildViewerBars() {
   }
 }
 
+// Custom video chrome: center cluster (±10s + play), seek ~26% from the
+// bottom, vertical volume at the right edge. Fades 2s after play starts;
+// tap on empty video toggles it back. Pause/end always reveal.
+const V_PLAY_SVG = '<svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5l11 7-11 7z"/></svg>';
+const V_PAUSE_SVG = '<svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';
+let vChromeTimer = 0;
+function videoWrapEl() { return $('#viewerVideoWrap'); }
+function videoChromeVisible() { return !!videoWrapEl()?.classList.contains('visible'); }
+function showVideoChrome() {
+  const w = videoWrapEl();
+  if (!w) return;
+  w.classList.add('visible');
+  clearTimeout(vChromeTimer);
+  vChromeTimer = setTimeout(() => {
+    const v = $('#viewerVideo');
+    if (v && !v.paused && !v.ended) w.classList.remove('visible');
+  }, 2000);
+}
+function setVPlayIcon(playing) {
+  const b = $('#vPlay');
+  if (b) b.innerHTML = playing ? V_PAUSE_SVG : V_PLAY_SVG;
+}
+
 function showViewerIndex(i) {
   if (!viewerItems.length) return;
   viewerIndex = (i + viewerItems.length) % viewerItems.length;
   const { url, kind } = viewerItems[viewerIndex];
-  const img = $('#viewerImg'), vid = $('#viewerVideo'), wrap = $('#viewerAudioWrap'), aud = $('#viewerAudio');
-  img.hidden = true; vid.hidden = true; wrap.hidden = true;
+  const img = $('#viewerImg'), vid = $('#viewerVideo'), vWrap = $('#viewerVideoWrap'), wrap = $('#viewerAudioWrap'), aud = $('#viewerAudio');
+  img.hidden = true; if (vWrap) vWrap.hidden = true; wrap.hidden = true;
   try { vid.pause?.(); } catch {}
   try { aud.pause?.(); } catch {}
   resetViewerAudioUi();
-  if (kind === 'video') { vid.src = url; vid.hidden = false; }
+  if (kind === 'video') {
+    vid.src = url;
+    const seek = $('#vSeek'), cur = $('#vCur'), dur = $('#vDur');
+    if (seek) seek.value = '0';
+    if (cur) cur.textContent = '0:00';
+    if (dur) dur.textContent = '0:00';
+    setVPlayIcon(false);
+    if (vWrap) vWrap.hidden = false;
+    showVideoChrome();
+  }
   else if (kind === 'audio') {
     aud.src = url;
     wrap.hidden = false;
@@ -316,7 +348,78 @@ function openViewer(url) {
   showViewerIndex(idx >= 0 ? idx : 0);
 }
 
+// Gallery select + delete: per-item × (two-tap) plus a Select mode with a
+// Delete (n) bar (two-tap). Deletes tombstone server-side via sync.
 let galleryToken = 0;
+let gallerySelectMode = false;
+const gallerySelected = new Set();
+let gallerySig = '';
+let galleryBuiltAt = 0;
+let deleteArmTimer = 0;
+const PLAY_BADGE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M7 4l13 8-13 8z"/></svg>';
+
+function exitGallerySelect() {
+  gallerySelectMode = false;
+  gallerySelected.clear();
+  disarmDeleteConfirm();
+  const bar = $('#galleryDeleteBar');
+  if (bar) bar.hidden = true;
+}
+
+function updateGalleryChrome(n) {
+  const bar = $('#galleryBar');
+  if (bar) bar.hidden = n === 0 && !gallerySelectMode;
+  const count = $('#galleryCount');
+  if (count) count.textContent = `${n} memor${n === 1 ? 'y' : 'ies'}`;
+  const sel = $('#gallerySelect');
+  if (sel) sel.textContent = gallerySelectMode ? 'Done' : 'Select';
+  const del = $('#galleryDeleteBar');
+  if (del) del.hidden = !gallerySelectMode;
+  refreshDeleteConfirm();
+}
+
+function refreshDeleteConfirm() {
+  const dc = $('#galleryDeleteConfirm');
+  if (!dc) return;
+  if (dc.dataset.armed) return;
+  const n = gallerySelected.size;
+  dc.textContent = n ? `Delete (${n})` : 'Delete';
+  dc.disabled = n === 0;
+}
+
+function disarmDeleteConfirm() {
+  clearTimeout(deleteArmTimer);
+  const dc = $('#galleryDeleteConfirm');
+  if (dc) { delete dc.dataset.armed; dc.classList.remove('armed'); }
+  refreshDeleteConfirm();
+}
+
+function toggleGalleryItem(id, wrap) {
+  if (gallerySelected.has(id)) { gallerySelected.delete(id); wrap?.classList.remove('selected'); }
+  else { gallerySelected.add(id); wrap?.classList.add('selected'); }
+  disarmDeleteConfirm();
+}
+
+function deleteGalleryItems(ids) {
+  if (!ids.length) return;
+  try {
+    engine.deleteActivities(ids);
+  } catch (e) {
+    toast('Delete failed — try again.');
+    return;
+  }
+  exitGallerySelect();
+  gallerySig = ''; // force rebuild; renderHud recounts + repaints
+  toast(ids.length === 1 ? 'Memory deleted.' : `${ids.length} memories deleted.`);
+  // Pins follow mastered state: un-mastered tiles lose their dots.
+  const snap = engine.getSnapshot();
+  try {
+    if (isMasteredCell(snap.store, selectedCell)) mapView.showTilePins(snap.store, selectedCell);
+    else mapView.hideTilePins();
+  } catch {}
+  renderHud();
+}
+
 async function renderTileGallery() {
   const gal = $('#tileGallery');
   if (!gal) return;
@@ -324,6 +427,13 @@ async function renderTileGallery() {
   const my = ++galleryToken;
   try {
     const acts = engine.getSnapshot().store.activities.filter((a) => a.cell === selectedCell && hasMedia(a));
+    const sigIds = acts.map((a) => a.id).sort().join(',');
+    // renderHud runs every second while tracking — skip the rebuild when the
+    // item set is unchanged (signed URLs are re-minted hourly instead).
+    if (sigIds === gallerySig && Date.now() - galleryBuiltAt < 50 * 60 * 1000 && !gal.hidden && gal.childElementCount > 0) {
+      updateGalleryChrome(acts.length);
+      return;
+    }
     // Resolve view URLs: same-session blob first (instant + private), else a
     // fresh signed URL from the stored path (never persisted).
     const items = [];
@@ -339,15 +449,34 @@ async function renderTileGallery() {
         }
         if (my !== galleryToken) return;
       }
-      items.push({ url, kind: mediaKind(a, url) });
+      items.push({ id: a.id, url, kind: mediaKind(a, url) });
     }
     if (my !== galleryToken) return;
+    gallerySig = sigIds;
+    galleryBuiltAt = Date.now();
     viewerItems = items;
+    // Prune selections that no longer exist.
+    const alive = new Set(items.map((it) => it.id));
+    for (const id of [...gallerySelected]) if (!alive.has(id)) gallerySelected.delete(id);
     gal.innerHTML = '';
     gal.hidden = items.length === 0;
-    for (const { url, kind } of items) {
+    for (const { id, url, kind } of items) {
+      const wrap = document.createElement('div');
+      wrap.className = 'g-item' + (gallerySelectMode ? ' selecting' : '') + (gallerySelected.has(id) ? ' selected' : '');
       let el;
-      if (kind === 'video') { el = document.createElement('video'); el.src = url; el.preload = 'metadata'; el.muted = true; el.playsInline = true; }
+      if (kind === 'video') {
+        el = document.createElement('video');
+        // #t=0.1 forces a real first frame (metadata-only preload renders
+        // blank on most mobile browsers); badge marks it as video regardless.
+        el.src = url + '#t=0.1';
+        el.preload = 'auto';
+        el.muted = true;
+        el.playsInline = true;
+        const badge = document.createElement('span');
+        badge.className = 'g-play';
+        badge.innerHTML = PLAY_BADGE;
+        wrap.appendChild(badge);
+      }
       else if (kind === 'audio') {
         el = document.createElement('button');
         el.type = 'button';
@@ -361,9 +490,40 @@ async function renderTileGallery() {
         el.src = url;
       }
       if (kind !== 'audio') el.className = 'g-thumb';
-      el.addEventListener('click', () => openViewer(url));
-      gal.appendChild(el);
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (gallerySelectMode) toggleGalleryItem(id, wrap);
+        else openViewer(url);
+      });
+      const check = document.createElement('span');
+      check.className = 'g-check';
+      check.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>';
+      check.addEventListener('click', (e) => { e.stopPropagation(); toggleGalleryItem(id, wrap); });
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'g-del';
+      del.setAttribute('aria-label', 'Delete memory');
+      del.textContent = '×';
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!del.dataset.armed) {
+          del.dataset.armed = '1';
+          del.classList.add('armed');
+          del.textContent = '!';
+          setTimeout(() => {
+            if (!del.isConnected) return;
+            delete del.dataset.armed;
+            del.classList.remove('armed');
+            del.textContent = '×';
+          }, 3000);
+          return;
+        }
+        deleteGalleryItems([id]);
+      });
+      wrap.append(el, check, del);
+      gal.appendChild(wrap);
     }
+    updateGalleryChrome(items.length);
   } catch (e) { console.warn('[gallery] render failed:', e?.message || e); }
 }
 
@@ -402,6 +562,9 @@ function isMasteredCell(store, cell) {
 }
 
 function selectCell(cell, { toastOnSelect = false } = {}) {
+  // A new tile always leaves gallery select mode (stale checkboxes die here).
+  exitGallerySelect();
+  gallerySig = '';
   selectedCell = cell;
   mapView.setSelected(cell);
   const snap = engine.getSnapshot();
@@ -723,18 +886,93 @@ function bindUi() {
   let camStream = null, camMode = 'photo', camFacing = 'environment', camRecorder = null, camChunks = [], camPhotoBlob = null, camVideoBlob = null;
   let voiceStream = null, voiceRecorder = null, voiceChunks = [], voiceBlob = null, voiceTimer = null, voiceSec = 0;
 
-  $('#viewerClose')?.addEventListener('click', () => { try { $('#mediaViewer').close(); } catch {} const v = $('#viewerVideo'); v.pause?.(); v.removeAttribute('src'); v.load?.(); const au = $('#viewerAudio'); au.pause?.(); au.removeAttribute('src'); });
+  $('#viewerClose')?.addEventListener('click', () => { try { $('#mediaViewer').close(); } catch {} clearTimeout(vChromeTimer); const w = $('#viewerVideoWrap'); if (w) w.hidden = true; const v = $('#viewerVideo'); v.pause?.(); v.removeAttribute('src'); v.load?.(); const au = $('#viewerAudio'); au.pause?.(); au.removeAttribute('src'); });
   $('#viewerPrev')?.addEventListener('click', (e) => { e.stopPropagation(); showViewerIndex(viewerIndex - 1); });
   $('#viewerNext')?.addEventListener('click', (e) => { e.stopPropagation(); showViewerIndex(viewerIndex + 1); });
+  // Gallery select + multi-delete.
+  $('#gallerySelect')?.addEventListener('click', () => {
+    gallerySelectMode = !gallerySelectMode;
+    if (!gallerySelectMode) gallerySelected.clear();
+    disarmDeleteConfirm();
+    gallerySig = ''; // force rebuild: checkboxes in, × buttons out (and back)
+    renderTileGallery();
+  });
+  $('#galleryDeleteCancel')?.addEventListener('click', () => {
+    exitGallerySelect();
+    gallerySig = '';
+    renderTileGallery();
+  });
+  $('#galleryDeleteConfirm')?.addEventListener('click', () => {
+    const dc = $('#galleryDeleteConfirm');
+    if (!dc || gallerySelected.size === 0) return;
+    if (!dc.dataset.armed) {
+      dc.dataset.armed = '1';
+      dc.classList.add('armed');
+      dc.textContent = `Tap again to delete ${gallerySelected.size}`;
+      clearTimeout(deleteArmTimer);
+      deleteArmTimer = setTimeout(disarmDeleteConfirm, 3000);
+      return;
+    }
+    deleteGalleryItems([...gallerySelected]);
+  });
   // Tap media toggles arrows (they auto-hide 1s after open)
   $('#viewerImg')?.addEventListener('click', () => {
     const prev = $('#viewerPrev');
     if (prev && !prev.hidden) hideNavNow(); else pokeNav();
   });
-  $('#viewerVideo')?.addEventListener('click', () => {
-    const prev = $('#viewerPrev');
-    if (prev && !prev.hidden) hideNavNow(); else pokeNav();
-  });
+  // Custom video player wiring (replaces native controls).
+  {
+    const vid = $('#viewerVideo');
+    const seek = $('#vSeek'), cur = $('#vCur'), dur = $('#vDur'), vol = $('#vVolume');
+    let seeking = false;
+    vid?.addEventListener('loadedmetadata', () => {
+      if (dur && vid.duration) dur.textContent = fmtClock(vid.duration);
+      if (cur) cur.textContent = fmtClock(vid.currentTime || 0);
+    });
+    vid?.addEventListener('timeupdate', () => {
+      if (!vid.duration || seeking) return;
+      if (seek) seek.value = String(Math.round((vid.currentTime / vid.duration) * 1000));
+      if (cur) cur.textContent = fmtClock(vid.currentTime);
+    });
+    vid?.addEventListener('play', () => { setVPlayIcon(true); showVideoChrome(); });
+    vid?.addEventListener('pause', () => { setVPlayIcon(false); clearTimeout(vChromeTimer); videoWrapEl()?.classList.add('visible'); });
+    vid?.addEventListener('ended', () => { setVPlayIcon(false); clearTimeout(vChromeTimer); videoWrapEl()?.classList.add('visible'); });
+    // Tap empty video area toggles the chrome.
+    vid?.addEventListener('click', () => {
+      if (videoChromeVisible()) { clearTimeout(vChromeTimer); videoWrapEl()?.classList.remove('visible'); }
+      else showVideoChrome();
+    });
+    $('#vPlay')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!vid) return;
+      if (vid.paused) vid.play().catch(() => {});
+      else vid.pause();
+    });
+    $('#vBack10')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (vid) vid.currentTime = Math.max(0, vid.currentTime - 10);
+      showVideoChrome();
+    });
+    $('#vFwd10')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (vid?.duration) vid.currentTime = Math.min(vid.duration, vid.currentTime + 10);
+      showVideoChrome();
+    });
+    seek?.addEventListener('input', () => {
+      if (vid?.duration) {
+        vid.currentTime = (Number(seek.value) / 1000) * vid.duration;
+        if (cur) cur.textContent = fmtClock(vid.currentTime);
+      }
+      showVideoChrome();
+    });
+    seek?.addEventListener('pointerdown', () => { seeking = true; });
+    seek?.addEventListener('pointerup', () => { seeking = false; });
+    seek?.addEventListener('change', () => { seeking = false; });
+    vol?.addEventListener('input', () => {
+      if (vid) vid.volume = Number(vol.value);
+      showVideoChrome();
+    });
+  }
   // Gallery voice player: wave window + seek + Play/Pause/Stop, remain counts down
   {
     const aud = $('#viewerAudio'), track = $('#viewerAudioTrack'), fill = $('#viewerAudioFill'), remain = $('#viewerAudioRemain');
@@ -827,7 +1065,7 @@ function bindUi() {
       const url = await uploadMedia(path, blob, blob.type);
       activity.media_url = url;
       activity.media_path = path;
-      try { localStorage.setItem('tourtle.v0.hex-progress', JSON.stringify(engine.getSnapshot().store)); } catch {}
+      try { engine.persist(); } catch {}
     } catch (e) {
       console.warn('[media] upload failed, queued for retry', e?.message || e);
       mediaOutbox.push({ id: activity.id, path, blob });
@@ -1022,8 +1260,8 @@ function bindUi() {
       if (idx !== -1) {
         engine.getSnapshot().store.activities[idx].media_url = url;
         engine.getSnapshot().store.activities[idx].media_path = path;
+        try { engine.persist(); } catch {}
       }
-      try { localStorage.setItem('tourtle.v0.hex-progress', JSON.stringify(engine.getSnapshot().store)); } catch {}
     } catch (e) {
       console.warn('[media] voice upload failed, queued for retry', e?.message || e);
       mediaOutbox.push({ id: activity.id, path, blob: voiceBlob });

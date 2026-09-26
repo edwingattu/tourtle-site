@@ -135,8 +135,16 @@ function emptyStore() {
     sandbox: {},
     // ISO timestamp of the newest activity already pushed to the cloud.
     activityCursor: null,
+    // Delete tombstones: ids that must never be re-pushed or re-pulled.
+    // pendingDeletes is the unsent outbox (cleared on flush success);
+    // deletedIds persists so launch-pulls can't resurrect deleted rows.
+    pendingDeletes: [],
+    deletedIds: [],
   };
 }
+
+// Tombstone caps: bounded so the lists can't grow without limit.
+const MAX_DELETED_IDS = 1000;
 
 function ensureTile(store, cell) {
   if (!store.tiles[cell]) {
@@ -405,12 +413,48 @@ export function createEngine(userId = null) {
       store.rev = (store.rev || 0) + 1;
       emit();
     },
+    // Delete activities by id: removed locally, tombstoned so sync drops
+    // the server rows + storage objects and pulls never resurrect them.
+    // Returns the removed rows (for storage-path cleanup by the caller).
+    // Sandbox rows stay local-only: never queued for cloud deletion.
+    deleteActivities(ids) {
+      const idSet = new Set(ids);
+      const removed = store.activities.filter((a) => idSet.has(a.id));
+      if (!removed.length) return [];
+      store.activities = store.activities.filter((a) => !idSet.has(a.id));
+      const tomb = new Set(store.deletedIds);
+      for (const a of removed) {
+        tomb.add(a.id);
+        if (!a.sandbox) {
+          if (!store.pendingDeletes.some((d) => d.id === a.id)) {
+            store.pendingDeletes.push({ id: a.id, path: a.media_path || null });
+          }
+        }
+      }
+      store.deletedIds = [...tomb].slice(-MAX_DELETED_IDS);
+      store.rev = (store.rev || 0) + 1;
+      emit({ type: 'activities-delete', ids });
+      return removed;
+    },
+    // Persist out-of-band mutations (media retry patching) without
+    // changing state.
+    persist() {
+      emit();
+    },
+    // Called after flush() confirms server + storage deletion.
+    clearPendingDeletes() {
+      if (!store.pendingDeletes?.length) return;
+      store.pendingDeletes = [];
+      emit();
+    },
     // Merge pulled activities by id (append-only upstream: no conflicts).
+    // Tombstoned ids are skipped — deletes win over re-pull.
     mergeActivities(rows) {
       const seen = new Set(store.activities.map((a) => a.id));
+      const dead = new Set(store.deletedIds);
       let added = false;
       for (const r of rows) {
-        if (seen.has(r.id)) continue;
+        if (seen.has(r.id) || dead.has(r.id)) continue;
         seen.add(r.id);
         store.activities.push({
           id: r.id,
