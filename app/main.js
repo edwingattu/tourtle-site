@@ -453,8 +453,11 @@ async function renderTileGallery() {
   if (!gal) return;
   if (voiceCaptureOpen) { gal.hidden = true; return; }
   const my = ++galleryToken;
+  // Tile ownership: this render belongs to the tile selected at call time.
+  // Re-verified after every await — a tile switch mid-resolve discards it.
+  const forCell = selectedCell;
   try {
-    const acts = engine.getSnapshot().store.activities.filter((a) => a.cell === selectedCell && hasMedia(a));
+    const acts = engine.getSnapshot().store.activities.filter((a) => a.cell === forCell && hasMedia(a));
     const sigIds = acts.map((a) => a.id).sort().join(',');
     // renderHud runs every second while tracking — skip the rebuild when the
     // item set is unchanged (signed URLs are re-minted hourly instead).
@@ -475,11 +478,11 @@ async function renderTileGallery() {
         } catch {
           continue;
         }
-        if (my !== galleryToken) return;
+        if (my !== galleryToken || forCell !== selectedCell) return;
       }
       items.push({ id: a.id, url, kind: mediaKind(a, url) });
     }
-    if (my !== galleryToken) return;
+    if (my !== galleryToken || forCell !== selectedCell) return;
     gallerySig = sigIds;
     galleryBuiltAt = Date.now();
     viewerItems = items;
@@ -1280,8 +1283,12 @@ function bindUi() {
   });
   $('#voiceSave')?.addEventListener('click', async () => {
     if (!voiceBlob) return;
-    const { lat, lng } = mapView.getUserLocation();
-    const cell = cellAt(lat, lng);
+    // Voice belongs to the VIEWED tile (it can be left remotely on
+    // unlocked/mastered tiles) — not the live cell. Pins + gallery key on
+    // this cell, so the dot sits on the right tile.
+    const cell = selectedCell;
+    const c = cellCenter(cell);
+    const { lat, lng } = { lat: c.lat, lng: c.lng };
     const activity = engine.logActivity({ title: 'Voice memory', category: selectedCategory, captureType: 'voice', lat, lng, cell });
     const uid = (await import('./auth.js').then((m) => m.supabase.auth.getUser())).data.user?.id;
     const ext = voiceBlob.type.includes('mp4') ? 'm4a' : 'webm';
