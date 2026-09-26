@@ -770,7 +770,8 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
     });
     let tapRaf = 0;
     const TAP_DUR = 650;
-    function playTapTile(geometry) {
+    // Unlocked/mastered tiles flash green, everything else white.
+    function playTapTile(geometry, status) {
       let flash, ring;
       try {
         flash = map.getSource('tap-flash');
@@ -778,9 +779,12 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
         if (!flash || !ring) return;
       } catch { return; }
       const feat = { type: 'Feature', properties: {}, geometry };
+      const live = status === 'unlocked' || status === 'mastered';
       try {
         flash.setData({ type: 'FeatureCollection', features: [feat] });
         ring.setData({ type: 'FeatureCollection', features: [feat] });
+        map.setPaintProperty('tap-flash', 'fill-color', live ? '#2ed67c' : '#ffffff');
+        map.setPaintProperty('tap-ring', 'line-color', live ? '#7ce3a8' : '#cfeafb');
       } catch { return; }
       cancelAnimationFrame(tapRaf);
       const t0 = performance.now();
@@ -835,7 +839,7 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       selectedCell = feature.properties.h3;
       // Tile feel: flash + echo ring + a 12ms haptic tick (Android only —
       // iOS Safari exposes no web haptics; the guard makes it a no-op).
-      playTapTile(feature.geometry);
+      playTapTile(feature.geometry, feature.properties.status);
       try { navigator.vibrate?.(12); } catch {}
       onHexSelect?.(selectedCell, feature.properties.status);
     });
