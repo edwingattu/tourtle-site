@@ -43,7 +43,12 @@ const engine = createEngine(currentUser?.id || null);
 // Debug hook early: available even while auth/map/sync are still loading.
 exposeDebug(window, engine);
 const mapView = createMap({
-  onHexSelect: (cell) => selectCell(cell, { toastOnSelect: true }),
+  // User taps pin the selection: GPS fixes must not yank the card back.
+  // Tapping the live tile itself unpins (resume follow).
+  onHexSelect: (cell) => {
+    selectionPinned = cell !== lastLiveCell;
+    selectCell(cell, { toastOnSelect: true });
+  },
   onMove: () => mapView.paint(engine.getSnapshot().store),
   onLevelSelect: (band, props) => {
     const detail = props.status === 'unclaimed' ? '' : ` · ${props.frac}% explored`;
@@ -60,6 +65,13 @@ const locationFilter = {
 let tracking = false;
 let watchId = null;
 let selectedCell = engine.getSnapshot().store.baseCell;
+// Pinned selection: a user tap sticks until they tap the live tile, hit
+// recenter, or physically move (live cell stable across 3 fixes — kills GPS
+// jitter unpinning a pinned card while standing still).
+let selectionPinned = false;
+let lastLiveCell = null;
+let liveCandidate = null;
+let liveCandidateHits = 0;
 let captureType = 'photo';
 let selectedCategory = 'dining';
 let placeCache = new Map();
@@ -504,7 +516,24 @@ function applyPosition(lat, lng, { fly = false, dwellMs = 0 } = {}) {
   mapView.setUserLocation(lng, lat, { fly });
   const cell = cellAt(lat, lng);
   if (dwellMs > 0 && !locationFilter.frozen) engine.dwell(cell, dwellMs);
-  if (cell !== selectedCell) selectCell(cell);
+  // Live-cell tracking with jitter guard: only a stable new live cell
+  // unpins a tapped selection and resumes follow.
+  if (lastLiveCell === null) {
+    lastLiveCell = cell;
+  } else if (cell !== lastLiveCell) {
+    if (cell === liveCandidate) liveCandidateHits += 1;
+    else { liveCandidate = cell; liveCandidateHits = 1; }
+    if (liveCandidateHits >= 3) {
+      lastLiveCell = cell;
+      liveCandidate = null;
+      liveCandidateHits = 0;
+      selectionPinned = false;
+    }
+  } else {
+    liveCandidate = null;
+    liveCandidateHits = 0;
+  }
+  if (!selectionPinned && cell !== selectedCell) selectCell(cell);
   else renderHud();
 }
 
@@ -627,6 +656,9 @@ function bindUi() {
   $('#trackingButton').addEventListener('click', () => setTracking(!tracking));
   $('#recenterButton').addEventListener('click', () => {
     mapView.recenter();
+    // Explicit "take me home": unpin and show the live tile's card.
+    selectionPinned = false;
+    try { selectCell(mapView.cellUnderUser()); } catch {}
     toast('Centered on your current tile.');
   });
   // Area-name tap logs debug info AND expands (no stopPropagation — swallowing
@@ -1212,6 +1244,11 @@ async function switchRegion(next) {
     activeRegion = next;
     updateCityTitle();
     mapView.paint(engine.getSnapshot().store);
+    // New region, new live context: drop any pinned selection.
+    selectionPinned = false;
+    lastLiveCell = null;
+    liveCandidate = null;
+    liveCandidateHits = 0;
     selectCell(mapView.cellUnderUser());
     const credit = $('#dataCredit');
     if (credit) credit.textContent = areasDbg.regionCredit();

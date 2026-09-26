@@ -830,7 +830,17 @@ export function createMap({ onHexSelect, onMove, onLevelSelect }) {
       const pinsSource = map.getSource('activities');
       if (!pinsSource) return;
       window.clearTimeout(pinFadeTimer);
-      const acts = (store.activities || []).filter((a) => a.cell === cell && a.lat != null && a.lng != null);
+      // Pin every activity on the tile; activities missing coords (older
+      // rows, sandbox touches) fall back to the hex center so the dots
+      // still reveal instead of silently rendering nothing.
+      let fallback = null;
+      const acts = (store.activities || [])
+        .filter((a) => a.cell === cell)
+        .map((a) => {
+          if (a.lat != null && a.lng != null) return a;
+          fallback = fallback || cellCenter(cell);
+          return { ...a, lat: fallback.lat, lng: fallback.lng };
+        });
       pinsSource.setData(activityCollection(acts));
       setPinsOpacity(1, 300);
       pinFadeTimer = window.setTimeout(() => setPinsOpacity(0, 60000), 500);
